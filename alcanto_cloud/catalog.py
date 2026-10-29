@@ -49,7 +49,7 @@ class Documento:
 DOCUMENTOS = (
     Documento("Contrato de trabajo", "Contrato Imprimible", ("C5", "C6", "C7", "C8", "C17", "C18", "C19", "C20", "C21", "C22", "C29", "D30", "C31", "C32", "C34", "C38", "C39")),
     Documento("Anexo de traslado", "Anexo Traslado", ("C5", "C6", "C17", "C18", "C29", "D30", "C43")),
-    Documento("Anexo de prórroga", "Anexo extension contrato", ("C5", "C6", "C7", "C8", "C17", "C18"), "Fecha de prórroga en la plantilla: comprobar antes de firmar"),
+    Documento("Anexo de prórroga", "Anexo extension contrato", ("C5", "C6", "C7", "C8", "C17", "C18", "ANEXO_M4"), "Ingresar la nueva fecha de término del anexo para generar la prórroga"),
     Documento("Inducción de prevención", "INDUCCION PREVENCION", ("C5", "C6", "C7", "C8", "C14", "D30")),
     Documento("Información de riesgos laborales (IRL)", "IRL", ("C5", "C6", "C17", "C18", "C29", "D30")),
     Documento("Procedimiento de trabajo seguro (PTS)", "PTS.", ("C5", "C6", "C7", "C8", "C29"), "Necesita contenido técnico D:T para el cargo"),
