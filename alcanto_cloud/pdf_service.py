@@ -8,7 +8,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from io import BytesIO
 import re
-from urllib.parse import quote
+import unicodedata
 
 import requests
 from pypdf import PdfReader
@@ -105,3 +105,42 @@ def validar_pdf(contenido: bytes, hoja: str) -> ResultadoPdf:
         raise
     except Exception as exc:
         raise ErrorDeConversion("No se pudo comprobar la integridad del PDF recibido.") from exc
+
+
+DOCUMENTOS_CON_TRABAJADOR = frozenset({
+    "Contrato Imprimible", "Anexo Traslado", "Anexo extension contrato",
+    "IRL", "ENTREGA PTS", "Registros Entrega EPP", "REGLAMENTO INTERNO",
+})
+
+
+def verificar_identidad_pdf(resultado: ResultadoPdf, hoja: str, nombre: str,
+                            rut: str, nombre_anterior: str = "") -> None:
+    """Falla si un documento personal parece mostrar el trabajador equivocado.
+
+    Un PDF sin texto extraíble no puede comprobarse; no lo damos por validado.
+    Esta prueba no sustituye comparar el documento con el original visualmente.
+    """
+    if hoja not in DOCUMENTOS_CON_TRABAJADOR:
+        return
+    if not resultado.texto_extraible:
+        raise ErrorDeConversion(
+            "PDF bloqueado: no se pudo extraer texto para verificar la identidad del trabajador.")
+
+    reader = PdfReader(BytesIO(resultado.contenido), strict=False)
+    todo = " ".join((page.extract_text() or "") for page in reader.pages)
+
+    def limpio(s: str) -> str:
+        s = unicodedata.normalize("NFKD", s.casefold())
+        s = "".join(c for c in s if not unicodedata.combining(c))
+        return re.sub(r"\s+", " ", s).strip()
+
+    texto = limpio(todo)
+    if not any(limpio(identificador) in texto for identificador in (nombre,rut)
+               if len(identificador.strip()) >= 4):
+        raise ErrorDeConversion(
+            "PDF bloqueado: no se confirmó el nombre ni RUT del trabajador solicitado."
+            " Revisar el cálculo de fórmulas del motor cloud.")
+    if nombre_anterior and limpio(nombre_anterior) != limpio(nombre) and \
+        limpio(nombre_anterior) in texto:
+        raise ErrorDeConversion(
+            "PDF bloqueado: parece contener el nombre del trabajador anterior de la plantilla.")
