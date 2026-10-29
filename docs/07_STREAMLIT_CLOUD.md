@@ -15,7 +15,8 @@ ASPOSE_CLIENT_ID = "TU_CLIENT_ID"
 ASPOSE_CLIENT_SECRET = "TU_CLIENT_SECRET"
 ```
 
-6. Subir el XLSX desde la interfaz cuando sea necesario, completar empresa y trabajadores y generar los documentos disponibles.
+6. El administrador debe instalar **una sola vez** el XLSX maestro en un bucket S3 privado, **fuera de la interfaz**. Ver [manual de aprovisionamiento](09_DESPLIEGUE_SIN_SUBIR_EXCEL.md). Los visitantes no suben ni seleccionan archivos.
+7. Abrir la web y completar directamente la empresa y los trabajadores; luego descargar los PDF.
 
 ## Privacidad del modo sin contraseña
 
