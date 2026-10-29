@@ -31,7 +31,7 @@ class ProrrogaConModeloReal(unittest.TestCase):
             self.assertNotEqual(re.search(celda, orig, re.S).group(1),
                                 re.search(celda, nuevo, re.S).group(1))
             for hoja in ("sheet1.xml", "sheet4.xml"):
-                formulas = lambda z: re.findall(rb'<f(?:\\s[^>]*)?>(.*?)</f>',
+                formulas = lambda z: re.findall(rb'<f(?:\s[^>]*)?>(.*?)</f>',
                     z.read("xl/worksheets/" + hoja), re.S)
                 self.assertEqual(formulas(a), formulas(b))
 
