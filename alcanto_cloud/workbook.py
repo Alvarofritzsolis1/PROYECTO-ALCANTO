@@ -186,9 +186,9 @@ def generar_copia(datos_originales: bytes, entradas: dict[str, str], *, limpiar_
             ext_match = _celda("M4").search(extension)
             if not ext_match:
                 raise PlantillaInvalida("No se encontró la fecha M4 del anexo de prórroga.")
-            if re.search(r"<f(?:\\s|>)", ext_match.group(2)):
+            if re.search(r"<f(?:\s|>)", ext_match.group(2)):
                 raise PlantillaInvalida("La fecha M4 tiene fórmula: no se puede editar.")
-            tag = re.sub(r'\\s+t="[^"]*"', "", ext_match.group(1))
+            tag = re.sub(r'\s+t="[^"]*"', "", ext_match.group(1))
             extension = extension[:ext_match.start()] + tag + f"<v>{serial}</v></c>" + extension[ext_match.end():]
         # Actualizar solamente indicadores de recálculo, sin modificar fórmulas.
         libro = z.read("xl/workbook.xml").decode("utf-8")
