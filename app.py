@@ -19,10 +19,10 @@ import streamlit as st
 from alcanto_cloud.catalog import (
     CAMPOS_EMPRESA, CAMPOS_TRABAJADOR, DOCUMENTOS, estado_documental,
 )
-from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion
+from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf
 from alcanto_cloud.storage import AlmacenPrivado
 from alcanto_cloud.workbook import (
-    PlantillaInvalida, catalogos, generar_copia, verificar_plantilla,
+    PlantillaInvalida, catalogos, generar_copia, verificar_plantilla, _abrir, _shared_strings, _leer_celdas,
 )
 
 st.set_page_config(page_title="PROYECTO ALCANTO | Gestión documental", page_icon="📄", layout="wide")
@@ -222,12 +222,16 @@ def descargar_documentos(template: bytes, empresa:dict, trabajador:dict, cat:dic
             with st.spinner("Preparando copia temporal del Excel sin modificar ninguna fórmula…"):
                 copia=generar_copia(template,datos)
                 motor=AsposeCellsCloud(cloud_id,cloud_key)
+                with _abrir(template) as z:
+                    nombre_anterior = _leer_celdas(z, "xl/worksheets/sheet1.xml", ["C17"], _shared_strings(z))["C17"]
             zipdata=BytesIO()
             total_paginas=0
             with ZipFile(zipdata, "w", ZIP_DEFLATED) as paquete:
                 progreso=st.progress(0.0)
                 for i,hoja in enumerate(seleccion,1):
                     resultado=motor.convertir_hoja(copia,hoja)
+                    verificar_identidad_pdf(resultado,hoja,datos.get("C17",""),
+                                             datos.get("C18",""),nombre_anterior)
                     safe=hoja.replace(" ","_").replace(".","")
                     paquete.writestr(f"{i:02d}_{safe}.pdf",resultado.contenido)
                     total_paginas+=resultado.paginas
