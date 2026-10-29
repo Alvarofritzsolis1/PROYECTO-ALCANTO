@@ -20,7 +20,6 @@ from alcanto_cloud.catalog import (
     CAMPOS_EMPRESA, CAMPOS_TRABAJADOR, DOCUMENTOS, estado_documental,
 )
 from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf
-from alcanto_cloud.storage import AlmacenPrivado
 from alcanto_cloud.workbook import (
     PlantillaInvalida, catalogos, generar_copia, verificar_plantilla, _abrir, _shared_strings, _leer_celdas,
 )
@@ -35,14 +34,14 @@ def secret(nombre: str) -> str:
         return ""
 
 
-def almacen() -> AlmacenPrivado | None:
-    try:
-        cfg = st.secrets.get("storage", None)
-    except (FileNotFoundError, KeyError):
-        cfg = None
-    if not cfg:
-        return None
-    return AlmacenPrivado(dict(cfg))
+def almacen() -> None:
+    """Modo público sin contraseñas: nunca abrir el almacenamiento compartido.
+
+    Todos los datos de empresa, trabajadores y plantilla quedan únicamente en
+    st.session_state del navegador actual. Esto impide que un visitante vea
+    registros que pertenecen a otro usuario.
+    """
+    return None
 
 
 def guardar(tipo: str, contenido: dict) -> str:
@@ -76,28 +75,6 @@ def inyectar_css() -> None:
     </style>""", unsafe_allow_html=True)
 
 
-def ingreso() -> None:
-    st.markdown("<div class='alcanto-top'><strong>ALCANTO</strong><p>Contratistas y prevención · Gestión documental 100% online</p></div>", unsafe_allow_html=True)
-    configurada = secret("ALCANTO_APP_PASSWORD")
-    if not configurada or configurada.startswith("CAMBIAR_") or len(configurada) < 16:
-        st.error("La aplicación aún no tiene contraseña segura configurada en los secretos de Streamlit.")
-        st.code("ALCANTO_APP_PASSWORD = 'contraseña-generada-de-20-caracteres-o-más'",language="toml")
-        st.stop()
-    if not st.session_state.get("autenticado", False):
-        st.subheader("Acceso autorizado")
-        with st.form("acceso"):
-            pass_value = st.text_input("Contraseña de acceso", type="password")
-            enviar = st.form_submit_button("Ingresar", type="primary")
-        if enviar:
-            from hmac import compare_digest
-            if compare_digest(pass_value.encode("utf-8"), configurada.encode("utf-8")):
-                st.session_state.autenticado = True
-                st.rerun()
-            else:
-                st.error("Contraseña incorrecta.")
-        st.info("Esta aplicación maneja RUT y datos personales. Restringe además el acceso a sus usuarios desde Streamlit Community Cloud.")
-        st.stop()
-
 
 def plantilla_actual() -> bytes | None:
     if st.session_state.get("plantilla_privada"):
@@ -126,7 +103,7 @@ def campo(ref: str, titulo: str, opciones: list[str] | None = None):
 
 def formulario_empresa() -> list[dict]:
     st.markdown("### 1. Empresas y representantes")
-    st.caption("La empresa queda registrada para reutilizarla con varios trabajadores. No necesitas repetir el RUT en cada documento.")
+    st.caption("La empresa queda registrada durante esta sesión para reutilizarla con varios trabajadores. No necesitas repetir el RUT en cada documento.")
     with st.expander("Registrar una empresa nueva",expanded=not bool(listar("empresas"))):
         with st.form("empresa_nueva",clear_on_submit=True):
             cols = st.columns(2)
@@ -141,7 +118,7 @@ def formulario_empresa() -> list[dict]:
             else:
                 try:
                     guardar("empresas",{"valores":{k:v.strip() for k,v in valores.items()}})
-                    st.success("Empresa registrada.")
+                    st.success("Empresa registrada temporalmente en esta sesión.")
                     st.rerun()
                 except Exception:
                     st.error("No se pudo guardar la empresa en el almacenamiento privado.")
@@ -256,32 +233,30 @@ def descargar_documentos(template: bytes, empresa:dict, trabajador:dict, cat:dic
 
 def main() -> None:
     inyectar_css()
-    ingreso()
     st.markdown("<div class='alcanto-top'><strong>PROYECTO ALCANTO</strong><p>Empresas, trabajadores, subcontratos y prevención | Automático y online</p></div>",unsafe_allow_html=True)
     with st.sidebar:
         st.markdown("## 📄 ALCANTO")
         st.caption("Gestiona el sistema sin instalar Excel")
-        if st.button("Cerrar sesión"):
-            st.session_state.clear()
-            st.rerun()
+        if st.checkbox("Confirmo que deseo borrar los datos de esta sesión"):
+            if st.button("Borrar datos temporales"):
+                st.session_state.clear()
+                st.rerun()
         st.divider()
         st.markdown("**Almacenamiento**")
-        st.write("🔐 Privado en la nube" if almacen() else "⚠️ Temporal en esta sesión")
+        st.write("🕒 Temporal y separado por visitante")
         st.markdown("**Motor de impresión**")
         st.write("✅ Credenciales configuradas" if secret("ASPOSE_CLIENT_ID") and secret("ASPOSE_CLIENT_SECRET") else "⚠️ Aspose no configurado")
         st.caption("No guardar archivos con RUT en GitHub público.")
     template=plantilla_actual()
     if not template:
         st.subheader("Configuración inicial de tu plantilla")
-        st.info("Carga UNA VEZ el XLSX del proyecto. En la nube se guarda como plantilla privada si conectas un bucket S3. El usuario no necesita Microsoft Excel para operar.")
+        st.info("Carga la plantilla XLSX en esta sesión del navegador. No se guarda en GitHub ni se comparte con otros visitantes. Para evitar exponer información personal, la carga y los registros se eliminan al finalizar o reiniciar la sesión.")
         nuevo=st.file_uploader("Archivo ALCANTO original (.xlsx, máximo 25 MB)",type=["xlsx"])
         confirmado=st.checkbox("Confirmo que estoy autorizado a tratar los datos personales del libro y, cuando genere PDFs, a enviarlos al procesador cloud configurado.")
         if nuevo and confirmado and st.button("Validar y cargar plantilla",type="primary"):
             try:
                 data=nuevo.getvalue()
                 resumen=verificar_plantilla(data)
-                if almacen():
-                    almacen().guardar_plantilla(data)
                 st.session_state.plantilla_privada=data
                 st.success(f"Plantilla validada: {len(resumen['hojas'])} hojas. No se cambió el archivo.")
                 st.rerun()
@@ -295,8 +270,7 @@ def main() -> None:
     except Exception:
         st.error("La matriz o los catálogos del Excel no se pueden leer. No se modificará el archivo.")
         st.stop()
-    if not almacen():
-        st.warning("Modo sesión: los registros desaparecerán cuando el servidor se reinicie. Configura un bucket S3 privado en Streamlit Secrets para conservarlos online.")
+    st.info("Modo sin contraseña: cada visitante usa su propia sesión temporal. Los registros no se comparten y se pierden al cerrar o reiniciar la sesión. No existe almacenamiento histórico persistente.")
     st.markdown("<div class='alcanto-box'>La fórmula y la presentación del Excel original se respetan. Los documentos se obtienen desde una copia temporal sin sobrescribir la plantilla.</div>",unsafe_allow_html=True)
     tab1,tab2 = st.tabs(["📋 Registrar empresas y trabajadores", "🖨️ Documentación e impresión"])
     with tab1:
