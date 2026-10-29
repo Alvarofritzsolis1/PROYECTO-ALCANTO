@@ -3,6 +3,29 @@
 
 **Base del sistema:** un Excel existente, probado por su propietario, que autocompleta documentos cuando se ingresan datos de empresa, representante, trabajador, especialidad y obra. **No se reconstruye ni se elimina lo que ya funciona.**
 
+## Aplicación local para generar PDF imprimibles
+
+Ya existe [`app.py`](app.py): interfaz **Streamlit** conectada a **Microsoft Excel de escritorio** mediante `pywin32`.
+
+- **No altera el Excel original:** trabaja sobre una copia temporal y la descarta al terminar.
+- **No modifica fórmulas:** bloquea escrituras en celdas con fórmulas; Excel recalcula sus propias fórmulas.
+- **Conserva el archivo para imprimir:** exporta cada hoja seleccionada con `Worksheet.ExportAsFixedFormat` respetando áreas de impresión.
+- **Identifica qué documentos se pueden generar** a partir de los datos rellenados y marca contenido PTS pendiente.
+- **Estado:** implementación publicada, validación de PDF real en Windows + Excel aún pendiente.
+
+**Instalar y usar:** [Instrucciones app para Windows](docs/06_APP_IMPRESION.md).
+
+Ejecutar en PowerShell desde la carpeta del proyecto:
+
+```powershell
+py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python -m streamlit run app.py --server.address 127.0.0.1
+```
+
+**No publicar en Streamlit Cloud o servidores externos:** procesa RUT y datos laborales; Microsoft desaconseja automatización de Office sin escritorio interactivo.
+
 ## ¿Qué documentación genera el Excel?
 
 | Documento | Origen | Estado |
@@ -55,7 +78,7 @@ El reporte dice `GENERABLE / REVISAR`, `FALTAN DATOS` o `PTS PENDIENTE`. **No ex
 
 - Referencia analizada: **17 hojas, 310 fórmulas**, 14 visibles y 3 ocultas.
 - **Prioridad:** completar D:T de 23 registros pendientes en `MATRIZ PTS`, sin tocar los tres procedimientos desarrollados.
-- Mejoras futuras, separadas del Excel original: tablero de disponibilidad, historial por empresa/trabajador y exportación PDF respetando el formato.
+- Mejoras futuras, separadas del Excel original: tablero de disponibilidad, historial por empresa/trabajador y validación de la exportación PDF local con el formato original.
 
 ## Protección de información
 
