@@ -174,9 +174,9 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
         cols=st.columns(2)
         for i,(ref,titulo) in enumerate(CAMPOS_TRABAJADOR.items()):
             with cols[i%2]:
-                if ref=="C29":
+                if ref=="C29" and cat.get("cargos"):
                     valores[ref]=st.selectbox(f"{titulo} · {ref}",options=[""]+cat["cargos"],key="nuevo_"+ref)
-                elif ref=="D30":
+                elif ref=="D30" and cat.get("obras"):
                     valores[ref]=st.selectbox(f"{titulo} · {ref}",options=[""]+cat["obras"],key="nuevo_"+ref)
                 else:
                     valores[ref]=st.text_input(f"{titulo} · {ref}",max_chars=800,key="nuevo_"+ref,
@@ -195,7 +195,7 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
     return elegida,None
 
 
-def descargar_documentos(template: bytes, empresa:dict, trabajador:dict, cat:dict) -> None:
+def descargar_documentos(template: bytes | None, empresa:dict, trabajador:dict, cat:dict) -> None:
     st.markdown("### 3. Documentos disponibles y PDF")
     datos={**empresa.get("valores",{}),**trabajador.get("valores",{})}
     estados=estado_documental(datos, cat["pts_completos"])
@@ -219,9 +219,11 @@ def descargar_documentos(template: bytes, empresa:dict, trabajador:dict, cat:dic
     avisar=st.checkbox("Confirmo que los datos son correctos, que conozco que el archivo se enviará por HTTPS a Aspose.Cells Cloud y revisaré los PDF antes de su uso.")
     cloud_id=secret("ASPOSE_CLIENT_ID")
     cloud_key=secret("ASPOSE_CLIENT_SECRET")
+    if not template:
+        st.warning("El Excel interno todavía no está instalado en el servidor. No tienes que subir ningún archivo.")
     if not cloud_id or not cloud_key:
         st.warning("Falta conectar Aspose.Cells Cloud en los secretos de Streamlit. Los PDFs online no se pueden generar todavía.")
-    if st.button("Generar PDF online para imprimir", type="primary",disabled=not (seleccion and avisar and cloud_id and cloud_key)):
+    if st.button("Generar PDF online para imprimir", type="primary",disabled=not (template and seleccion and avisar and cloud_id and cloud_key)):
         try:
             with st.spinner("Preparando copia temporal del Excel sin modificar ninguna fórmula…"):
                 copia=generar_copia(template,datos)
@@ -276,15 +278,14 @@ def main() -> None:
         st.caption("No guardar archivos con RUT en GitHub público.")
     template=plantilla_actual()
     if not template:
-        st.error("ALCANTO aún no tiene instalada la plantilla interna de documentos.")
-        st.info("No tienes que subir ningún Excel. El administrador debe instalar una sola vez el archivo maestro en el almacenamiento privado del servidor. Después solo completas los formularios para generar documentos.")
-        st.caption("Configuración técnica: docs/09_DESPLIEGUE_SIN_SUBIR_EXCEL.md")
-        st.stop()
-    try:
-        catalogo = catalogos(template)
-    except Exception:
-        st.error("La matriz o los catálogos del Excel no se pueden leer. No se modificará el archivo.")
-        st.stop()
+        st.warning("El Excel interno todavía no está instalado en el servidor. Puedes registrar empresas y trabajadores; para generar PDF el administrador debe instalarlo una sola vez. No necesitas subir archivos desde esta página.")
+        catalogo={"cargos":[], "obras":[], "pts_completos":set()}
+    else:
+        try:
+            catalogo = catalogos(template)
+        except Exception:
+            st.error("Los catálogos del Excel interno no pueden leerse; no se modificará la plantilla.")
+            st.stop()
     st.info("Modo sin contraseña: cada visitante usa su propia sesión temporal. Los registros no se comparten y se pierden al cerrar o reiniciar la sesión. No existe almacenamiento histórico persistente.")
     st.markdown("<div class='alcanto-box'>La fórmula y la presentación del Excel original se respetan. Los documentos se obtienen desde una copia temporal sin sobrescribir la plantilla.</div>",unsafe_allow_html=True)
     tab1,tab2 = st.tabs(["📋 Registrar empresas y trabajadores", "🖨️ Documentación e impresión"])
