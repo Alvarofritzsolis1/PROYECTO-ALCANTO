@@ -1,10 +1,10 @@
 # PROYECTO ALCANTO — Plataforma Streamlit 100% online
 
-**Aplicación web sin contraseña.** Se abre directamente desde Streamlit Cloud y no requiere Excel, Windows ni registro de acceso para usar la interfaz. El XLSX original se carga desde el navegador y se procesa solo como copia temporal, conservando hojas y fórmulas. La generación de PDFs depende de Aspose.Cells Cloud.
+**Aplicación web sin contraseña.** Se abre directamente desde Streamlit Cloud y no requiere Excel, Windows ni registro de acceso para usar la interfaz. El usuario **no sube ningún XLSX**: solo completa los formularios de empresa y trabajador. El modelo original se instala una sola vez en el servidor, y la generación de PDF usa una copia temporal del libro, conservando sus fórmulas; el cálculo depende de Aspose.Cells Cloud.
 
-**Importante sobre privacidad:** al eliminar la contraseña, los registros de empresas, trabajadores y la plantilla quedan aislados en la sesión temporal de cada visitante. No se recuperan datos de un almacenamiento común, aunque existan credenciales S3; tampoco se almacenan historiales permanentes. Al cerrar o perder la sesión puede ser necesario ingresar nuevamente la información. Esta decisión evita que terceros accedan a datos personales de otros usuarios.
+**Importante sobre privacidad:** al eliminar la contraseña, los registros de empresas y trabajadores quedan aislados en la sesión temporal de cada visitante. La plantilla maestra se lee únicamente desde el servidor; no se recuperan registros de un almacenamiento común, aunque existan credenciales S3; tampoco se almacenan historiales permanentes. Al cerrar o perder la sesión puede ser necesario ingresar nuevamente la información. Esta decisión evita que terceros accedan a datos personales de otros usuarios.
 
-**[Ver cómo desplegar en Streamlit Community Cloud](docs/07_STREAMLIT_CLOUD.md)** · [Modo sin contraseña: privacidad y límites](docs/08_MODO_SIN_CONTRASENA.md) · [Entrar a Streamlit](https://share.streamlit.io/)
+**[Web sin subir Excel](docs/09_DESPLIEGUE_SIN_SUBIR_EXCEL.md)** · **[Ver cómo desplegar en Streamlit Community Cloud](docs/07_STREAMLIT_CLOUD.md)** · [Modo sin contraseña: privacidad y límites](docs/08_MODO_SIN_CONTRASENA.md) · [Entrar a Streamlit](https://share.streamlit.io/)
 
 **Estado de verificación:** revisión del archivo real con **17 hojas y 310 fórmulas**, seis pruebas estructurales aprobadas. **Aún pendiente**: conectar credenciales de Aspose y almacenamiento privado, desplegar en la cuenta Streamlit del usuario y validar los PDFs de las diez hojas. No se garantiza equivalencia visual hasta realizar estas comprobaciones.
 
