@@ -33,9 +33,7 @@ export function sustituirEntradas(template:Uint8Array, datos:Record<string,strin
    throw new Error("La celda "+ref+" tiene fórmula: NO será modificada.");
   const numeric=ref==="C32";
   if(numeric && !/^\d{1,12}$/.test(valor))throw new Error("Sueldo debe contener solo números.");
-  const open=match[1].replace(/\s+t="[^"]*"/g,"")+(numeric ? "" : ' t="inlineStr"');
-  // Move any new 't' into the start tag before the closing bracket.
-  const tag=open.replace(/>$/,numeric?">":' t="inlineStr">').replace(/ t="inlineStr" t="inlineStr">$/,' t="inlineStr">');
+  const tag=match[1].replace(/\\s+t="[^"]*"/g,"").replace(/>$/,numeric?">":' t="inlineStr">');
   const body=numeric? "<v>"+valor+"</v>": '<is><t xml:space="preserve">'+escapeXml(valor)+"</t></is>";
   xml=xml.replace(rx,()=>tag+body+"</c>");
  }
