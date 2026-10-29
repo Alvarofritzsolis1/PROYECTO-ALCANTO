@@ -1,8 +1,10 @@
 # PROYECTO ALCANTO — Plataforma Streamlit 100% online
 
-**Esta es la versión activa del sistema.** Usa el [app.py de la raíz](app.py) y funciona desde un navegador; no exige instalar Excel ni Windows al usuario. Sus hojas y fórmulas se conservan en una plantilla XLSX privada y los PDF se solicitan a Aspose.Cells Cloud cuando el servicio está configurado.
+**Aplicación web sin contraseña.** Se abre directamente desde Streamlit Cloud y no requiere Excel, Windows ni registro de acceso para usar la interfaz. El XLSX original se carga desde el navegador y se procesa solo como copia temporal, conservando hojas y fórmulas. La generación de PDFs depende de Aspose.Cells Cloud.
 
-**[Ver cómo desplegar en Streamlit Community Cloud](docs/07_STREAMLIT_CLOUD.md)** · [Entrar a Streamlit](https://share.streamlit.io/)
+**Importante sobre privacidad:** al eliminar la contraseña, los registros de empresas, trabajadores y la plantilla quedan aislados en la sesión temporal de cada visitante. No se recuperan datos de un almacenamiento común, aunque existan credenciales S3; tampoco se almacenan historiales permanentes. Al cerrar o perder la sesión puede ser necesario ingresar nuevamente la información. Esta decisión evita que terceros accedan a datos personales de otros usuarios.
+
+**[Ver cómo desplegar en Streamlit Community Cloud](docs/07_STREAMLIT_CLOUD.md)** · [Modo sin contraseña: privacidad y límites](docs/08_MODO_SIN_CONTRASENA.md) · [Entrar a Streamlit](https://share.streamlit.io/)
 
 **Estado de verificación:** revisión del archivo real con **17 hojas y 310 fórmulas**, seis pruebas estructurales aprobadas. **Aún pendiente**: conectar credenciales de Aspose y almacenamiento privado, desplegar en la cuenta Streamlit del usuario y validar los PDFs de las diez hojas. No se garantiza equivalencia visual hasta realizar estas comprobaciones.
 
@@ -15,28 +17,9 @@
 
 **Base del sistema:** un Excel existente, probado por su propietario, que autocompleta documentos cuando se ingresan datos de empresa, representante, trabajador, especialidad y obra. **No se reconstruye ni se elimina lo que ya funciona.**
 
-## Aplicación local para generar PDF imprimibles
+## Código legado (no usado por Streamlit Cloud)
 
-Ya existe [`app.py`](app.py): interfaz **Streamlit** conectada a **Microsoft Excel de escritorio** mediante `pywin32`.
-
-- **No altera el Excel original:** trabaja sobre una copia temporal y la descarta al terminar.
-- **No modifica fórmulas:** bloquea escrituras en celdas con fórmulas; Excel recalcula sus propias fórmulas.
-- **Conserva el archivo para imprimir:** exporta cada hoja seleccionada con `Worksheet.ExportAsFixedFormat` respetando áreas de impresión.
-- **Identifica qué documentos se pueden generar** a partir de los datos rellenados y marca contenido PTS pendiente.
-- **Estado:** implementación publicada, validación de PDF real en Windows + Excel aún pendiente.
-
-**Instalar y usar:** [Instrucciones app para Windows](docs/06_APP_IMPRESION.md).
-
-Ejecutar en PowerShell desde la carpeta del proyecto:
-
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-python -m streamlit run app.py --server.address 127.0.0.1
-```
-
-**No publicar en Streamlit Cloud o servidores externos:** procesa RUT y datos laborales; Microsoft desaconseja automatización de Office sin escritorio interactivo.
+La aplicación Windows con Excel de escritorio se conserva como código de referencia en `legacy/app_windows.py` y no corresponde a la versión que se despliega desde `app.py`.
 
 ## ¿Qué documentación genera el Excel?
 
