@@ -1,0 +1,2 @@
+streamlit>=1.36,<2
+pywin32>=306; sys_platform == "win32"
