@@ -18,6 +18,8 @@ import streamlit as st
 
 from alcanto_cloud.catalog import (
     CAMPOS_EMPRESA, CAMPOS_TRABAJADOR, DOCUMENTOS, estado_documental,
+    catalogo_predefinido, RENTA_BASE_REFERENCIA, JORNADA_REFERENCIA,
+    PAGO_REFERENCIA,
 )
 from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf
 from alcanto_cloud.storage import AlmacenPrivado
@@ -154,6 +156,7 @@ def formulario_empresa() -> list[dict]:
 
 def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None, dict | None]:
     st.markdown("### 2. Trabajadores")
+    st.caption("3 obras predefinidas y 25 cargos del Excel. Renta de referencia $553.553 y jornada 42, ambas editables.")
     if not empresas:
         st.info("Primero registra una empresa para comenzar.")
         return None,None
@@ -174,13 +177,50 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
         cols=st.columns(2)
         for i,(ref,titulo) in enumerate(CAMPOS_TRABAJADOR.items()):
             with cols[i%2]:
-                if ref=="C29" and cat.get("cargos"):
-                    valores[ref]=st.selectbox(f"{titulo} · {ref}",options=[""]+cat["cargos"],key="nuevo_"+ref)
-                elif ref=="D30" and cat.get("obras"):
-                    valores[ref]=st.selectbox(f"{titulo} · {ref}",options=[""]+cat["obras"],key="nuevo_"+ref)
+                if ref == "C29":
+                    valores[ref] = st.selectbox(
+                        f"{titulo} · {ref}", options=[""] + list(cat["cargos"]),
+                        key="nuevo_"+ref,
+                        help="Especialidades originales de MATRIZ PTS; se guarda la clave exacta del Excel.",
+                    )
+                elif ref == "D30":
+                    valores[ref] = st.selectbox(
+                        f"{titulo} · {ref}", options=[""] + list(cat["obras"]),
+                        key="nuevo_"+ref,
+                        help="Las 3 obras corresponden a la lista D30 del Excel.",
+                    )
+                    obra_actual = valores[ref]
+                    if obra_actual and cat.get("direcciones", {}).get(obra_actual):
+                        st.caption("Dirección vinculada automáticamente: " + cat["direcciones"][obra_actual])
+                elif ref == "C31":
+                    valores[ref] = str(st.number_input(
+                        f"{titulo} · {ref}", min_value=1, max_value=60,
+                        value=JORNADA_REFERENCIA, step=1, key="nuevo_"+ref,
+                        help="Jornada de referencia del Excel: 42 horas; puedes cambiarla.",
+                    ))
+                elif ref == "C32":
+                    valores[ref] = str(st.number_input(
+                        f"{titulo} · {ref}", min_value=1, max_value=999_999_999,
+                        value=RENTA_BASE_REFERENCIA, step=10_000, key="nuevo_"+ref,
+                        help="Sueldo predefinido en el Excel: $553.553; puedes cambiarlo por trabajador.",
+                    ))
+                elif ref == "C34":
+                    valores[ref] = st.text_input(
+                        f"{titulo} · {ref}", value=PAGO_REFERENCIA, max_chars=100,
+                        key="nuevo_"+ref, help="El Excel trae MENSUALMENTE; editable.",
+                    )
+                elif ref == "C43":
+                    destinos = st.multiselect(
+                        f"{titulo} · {ref}", options=list(cat["obras"]),
+                        key="nuevo_"+ref,
+                        help="Selecciona únicamente las obras de traslado efectivamente autorizadas.",
+                    )
+                    valores[ref] = "Faenas " + ", ".join(destinos) if destinos else ""
                 else:
-                    valores[ref]=st.text_input(f"{titulo} · {ref}",max_chars=800,key="nuevo_"+ref,
-                                             placeholder="AAAA-MM-DD" if ref=="C20" else None)
+                    valores[ref] = st.text_input(
+                        f"{titulo} · {ref}", max_chars=800,key="nuevo_"+ref,
+                        placeholder="AAAA-MM-DD" if ref=="C20" else None,
+                    )
         valores["ANEXO_M4"] = st.text_input(
             "Nueva fecha de término para prórroga (AAAA-MM-DD) · Anexo M4",
             key="nuevo_anexo_m4", placeholder="2026-12-31",
@@ -283,13 +323,15 @@ def main() -> None:
     template=plantilla_actual()
     if not template:
         st.warning("El Excel interno todavía no está instalado en el servidor. Puedes registrar empresas y trabajadores; para generar PDF el administrador debe instalarlo una sola vez. No necesitas subir archivos desde esta página.")
-        catalogo={"cargos":[], "obras":[], "pts_completos":set()}
+        catalogo = catalogo_predefinido()
     else:
         try:
             catalogo = catalogos(template)
         except Exception:
-            st.error("Los catálogos del Excel interno no pueden leerse; no se modificará la plantilla.")
-            st.stop()
+            st.error("El motor no pudo leer los catálogos internos. La pantalla conserva las opciones originales, pero se bloqueará la impresión hasta corregir la plantilla.")
+            catalogo = catalogo_predefinido()
+        else:
+            catalogo["direcciones"] = catalogo_predefinido()["direcciones"]
     st.info("Modo sin contraseña: cada visitante usa su propia sesión temporal. Los registros no se comparten y se pierden al cerrar o reiniciar la sesión. No existe almacenamiento histórico persistente.")
     st.markdown("<div class='alcanto-box'>La fórmula y la presentación del Excel original se respetan. Los documentos se obtienen desde una copia temporal sin sobrescribir la plantilla.</div>",unsafe_allow_html=True)
     tab1,tab2 = st.tabs(["📋 Registrar empresas y trabajadores", "🖨️ Documentación e impresión"])
