@@ -1,218 +1,320 @@
-"""ALCANTO: generador LOCAL de PDFs, calculados e impresos con Microsoft Excel.
-NO modifica el original. Requiere Windows + Excel de escritorio y sesión interactiva.
-Lanzar: python -m streamlit run app.py --server.address 127.0.0.1
+"""PROYECTO ALCANTO — plataforma 100% online para Streamlit Community Cloud.
+
+No necesita Microsoft Excel ni archivos en el computador durante el uso diario.
+Las 17 hojas y fórmulas están en una plantilla XLSX privada. Los cambios se
+aplican SOLO a una copia en memoria. Para un PDF se requiere Aspose.Cells Cloud.
 """
 from __future__ import annotations
 
-import hashlib
-import io
-import platform
-import re
-import tempfile
+from datetime import datetime, timezone
+from hashlib import sha256
+from io import BytesIO
+import os
 from pathlib import Path
+from uuid import uuid4
 from zipfile import ZipFile, ZIP_DEFLATED
 
 import streamlit as st
-from scripts.estado_documental import libro as rutas_libro, leer_celdas, REQUISITOS, tiene_dato, pts_completo
 
-DOCUMENTOS = (
-    "Contrato Imprimible",
-    "Anexo Traslado",
-    "Anexo extension contrato",
-    "INDUCCION PREVENCION",
-    "IRL",
-    "PTS.",
-    "ENTREGA PTS",
-    "Registros Entrega EPP",
-    "REGLAMENTO INTERNO",
-    "DECLARACION JURADA",
+from alcanto_cloud.catalog import (
+    CAMPOS_EMPRESA, CAMPOS_TRABAJADOR, DOCUMENTOS, estado_documental,
+)
+from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion
+from alcanto_cloud.storage import AlmacenPrivado
+from alcanto_cloud.workbook import (
+    PlantillaInvalida, catalogos, generar_copia, verificar_plantilla,
 )
 
-# Verificadas como casillas sin fórmula en la planilla original.
-EDITABLES = {
-    "C5": "Empresa", "C6": "RUT empresa", "C7": "Representante legal",
-    "C8": "RUT representante", "C9": "Teléfono empresa",
-    "C10": "Domicilio empresa", "C11": "Comuna empresa", "C12": "Ciudad empresa",
-    "C13": "Correo empresa", "C14": "Rubro",
-    "C17": "Nombre trabajador", "C18": "RUT trabajador", "C19": "Nacionalidad",
-    "C21": "Estado civil", "C22": "Domicilio trabajador", "C23": "Comuna trabajador",
-    "C24": "Ciudad trabajador", "C25": "Correo trabajador", "C26": "Teléfono trabajador",
-    "C29": "Cargo / especialidad", "D30": "Obra / faena",
-    "C31": "Jornada", "C32": "Sueldo base en pesos (solo números)",
-    "C34": "Frecuencia de pago", "C35": "Datos de pago",
-    "C38": "AFP", "C39": "Salud", "C43": "Destinos para traslado",
-    "C44": "Locomoción",
-}
+st.set_page_config(page_title="PROYECTO ALCANTO | Gestión documental", page_icon="📄", layout="wide")
+
+# No mostrar valores reales en avisos ni en registros de aplicación.
+def secret(nombre: str) -> str:
+    try:
+        return str(st.secrets.get(nombre, ""))
+    except (FileNotFoundError, KeyError):
+        return ""
 
 
-def inspeccionar(contenido: bytes):
-    with ZipFile(io.BytesIO(contenido)) as z:
-        rutas, cadenas = rutas_libro(z)
-        for nombre in ("Datos Contrato", "MATRIZ PTS", "Anexo extension contrato", *DOCUMENTOS):
-            if nombre not in rutas:
-                raise ValueError("Falta la hoja " + nombre)
-        datos = leer_celdas(z, rutas["Datos Contrato"], cadenas)
-        matriz = leer_celdas(z, rutas["MATRIZ PTS"], cadenas)
-        anexo = leer_celdas(z, rutas["Anexo extension contrato"], cadenas)
-        return datos, matriz, anexo
+def almacen() -> AlmacenPrivado | None:
+    try:
+        cfg = st.secrets.get("storage", None)
+    except (FileNotFoundError, KeyError):
+        cfg = None
+    if not cfg:
+        return None
+    return AlmacenPrivado(dict(cfg))
 
 
-def estados(datos: dict, matriz: dict, anexo: dict, cambios: dict):
-    actual = dict(datos)
-    actual.update({celda: (valor, False) for celda, valor in cambios.items()})
-    cargo = str(actual.get("C29", ("", False))[0] or "")
-    pts_valido, estado_pts = pts_completo(matriz, cargo) if cargo else (False, "Cargo sin informar")
-    resultado = []
-    for hoja in DOCUMENTOS:
-        faltan = [celda for celda in REQUISITOS[hoja] if not tiene_dato(actual, celda)]
-        if hoja == "Anexo extension contrato" and not tiene_dato(anexo, "M4"):
-            faltan.append("Anexo extension contrato!M4")
-        if faltan:
-            estado, detalle = "FALTAN DATOS", ", ".join(faltan)
-        elif hoja == "PTS." and not pts_valido:
-            estado, detalle = "PTS PENDIENTE", estado_pts
+def guardar(tipo: str, contenido: dict) -> str:
+    store = almacen()
+    if store:
+        return store.guardar(tipo, contenido)
+    registro = {**contenido, "id": str(uuid4()),
+                "creado": datetime.now(timezone.utc).isoformat()}
+    st.session_state.setdefault("demo_" + tipo, []).insert(0, registro)
+    return registro["id"]
+
+
+def listar(tipo: str) -> list[dict]:
+    store = almacen()
+    if store:
+        return store.listar(tipo)
+    return st.session_state.setdefault("demo_" + tipo, [])
+
+
+def inyectar_css() -> None:
+    st.markdown("""<style>
+    .stApp{background:#f5f8fb}
+    [data-testid="stSidebar"]{background:#132b43;color:white}
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"]{color:white}
+    .alcanto-top{background:#152d46;border-radius:15px;color:white;padding:24px 30px;margin:6px 0 20px}
+    .alcanto-top strong{font-size:26px;letter-spacing:1px}
+    .alcanto-top p{color:#c5d9e4;margin-bottom:0}
+    .alcanto-box{padding:15px;border-radius:10px;background:#e7f3f1;margin:8px 0 12px;color:#17665f}
+    .stButton button[kind="primary"]{background:#087c75;border-color:#087c75}
+    .stMetric{border:1px solid #dae2ea;border-radius:11px;background:white;padding:12px}
+    </style>""", unsafe_allow_html=True)
+
+
+def ingreso() -> None:
+    st.markdown("<div class='alcanto-top'><strong>ALCANTO</strong><p>Contratistas y prevención · Gestión documental 100% online</p></div>", unsafe_allow_html=True)
+    configurada = secret("ALCANTO_APP_PASSWORD")
+    if not configurada or configurada.startswith("CAMBIAR_") or len(configurada) < 16:
+        st.error("La aplicación aún no tiene contraseña segura configurada en los secretos de Streamlit.")
+        st.code("ALCANTO_APP_PASSWORD = 'contraseña-generada-de-20-caracteres-o-más'",language="toml")
+        st.stop()
+    if not st.session_state.get("autenticado", False):
+        st.subheader("Acceso autorizado")
+        with st.form("acceso"):
+            pass_value = st.text_input("Contraseña de acceso", type="password")
+            enviar = st.form_submit_button("Ingresar", type="primary")
+        if enviar:
+            from hmac import compare_digest
+            if compare_digest(pass_value.encode("utf-8"), configurada.encode("utf-8")):
+                st.session_state.autenticado = True
+                st.rerun()
+            else:
+                st.error("Contraseña incorrecta.")
+        st.info("Esta aplicación maneja RUT y datos personales. Restringe además el acceso a sus usuarios desde Streamlit Community Cloud.")
+        st.stop()
+
+
+def plantilla_actual() -> bytes | None:
+    if st.session_state.get("plantilla_privada"):
+        return st.session_state.plantilla_privada
+    store = almacen()
+    if store:
+        try:
+            data = store.obtener_plantilla()
+            if data:
+                verificar_plantilla(data)
+                st.session_state.plantilla_privada = data
+                return data
+        except Exception:
+            st.warning("No se pudo recuperar la plantilla privada de la nube. Revisa la conexión S3.")
+    return None
+
+
+def campo(ref: str, titulo: str, opciones: list[str] | None = None):
+    if opciones:
+        opciones = [""] + opciones
+        return st.selectbox(f"{titulo} · {ref}",options=opciones, key="campo_"+ref)
+    if ref == "C20":
+        return st.text_input(f"{titulo} · {ref}",placeholder="1995-08-21",key="campo_"+ref)
+    return st.text_input(f"{titulo} · {ref}", key="campo_"+ref)
+
+
+def formulario_empresa() -> list[dict]:
+    st.markdown("### 1. Empresas y representantes")
+    st.caption("La empresa queda registrada para reutilizarla con varios trabajadores. No necesitas repetir el RUT en cada documento.")
+    with st.expander("Registrar una empresa nueva",expanded=not bool(listar("empresas"))):
+        with st.form("empresa_nueva",clear_on_submit=True):
+            cols = st.columns(2)
+            valores = {}
+            for i, (ref,titulo) in enumerate(CAMPOS_EMPRESA.items()):
+                with cols[i%2]:
+                    valores[ref] = st.text_input(f"{titulo} · {ref}",max_chars=800,key="emp_"+ref)
+            enviado = st.form_submit_button("Guardar empresa",type="primary")
+        if enviado:
+            if not valores["C5"].strip() or not valores["C6"].strip():
+                st.error("Faltan nombre y RUT del empleador.")
+            else:
+                try:
+                    guardar("empresas",{"valores":{k:v.strip() for k,v in valores.items()}})
+                    st.success("Empresa registrada.")
+                    st.rerun()
+                except Exception:
+                    st.error("No se pudo guardar la empresa en el almacenamiento privado.")
+    return listar("empresas")
+
+
+def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None, dict | None]:
+    st.markdown("### 2. Trabajadores")
+    if not empresas:
+        st.info("Primero registra una empresa para comenzar.")
+        return None,None
+    nombres = {emp["id"]:emp.get("valores",{}).get("C5", "Empresa sin nombre") for emp in empresas}
+    id_empresa=st.selectbox("Empresa de este trabajador",options=list(nombres),format_func=lambda x:nombres[x])
+    elegida=next((e for e in empresas if e["id"]==id_empresa),None)
+    trabajadores=[t for t in listar("trabajadores") if t.get("empresa_id")==id_empresa]
+    opciones=[""]+[t["id"] for t in trabajadores]
+    sel=st.selectbox("Trabajador existente / crear nuevo",options=opciones,
+                     format_func=lambda x: "➕ Nuevo trabajador" if not x else next((t["valores"].get("C17","") for t in trabajadores if t["id"]==x),"Trabajador"))
+    actual=next((t for t in trabajadores if t["id"]==sel), None)
+    if actual:
+        st.success("Ficha seleccionada. Ya puedes generar los documentos asociados a este trabajador.")
+        st.caption("Para cambiar datos, crea una nueva ficha, conservando el historial de la anterior.")
+        return elegida,actual
+    with st.form("nuevo_trabajador",clear_on_submit=True):
+        valores={}
+        cols=st.columns(2)
+        for i,(ref,titulo) in enumerate(CAMPOS_TRABAJADOR.items()):
+            with cols[i%2]:
+                if ref=="C29":
+                    valores[ref]=st.selectbox(f"{titulo} · {ref}",options=[""]+cat["cargos"],key="nuevo_"+ref)
+                elif ref=="D30":
+                    valores[ref]=st.selectbox(f"{titulo} · {ref}",options=[""]+cat["obras"],key="nuevo_"+ref)
+                else:
+                    valores[ref]=st.text_input(f"{titulo} · {ref}",max_chars=800,key="nuevo_"+ref,
+                                             placeholder="AAAA-MM-DD" if ref=="C20" else None)
+        creado=st.form_submit_button("Registrar trabajador",type="primary")
+    if creado:
+        if not all(valores.get(x, "").strip() for x in ("C17","C18","C29","D30")):
+            st.error("Completa nombre, RUT, cargo y obra del trabajador.")
         else:
-            estado, detalle = "GENERABLE / REVISAR", "Revisar contenido, fechas y firmas"
-        resultado.append({"Documento": hoja, "Estado": estado, "Detalle": detalle})
-    return resultado
-
-
-def pdf_en_excel(contenido: bytes, seleccion: list[str], cambios: dict) -> bytes:
-    """La copia es EFÍMERA. Nunca se escribe la plantilla ni se guardan cambios."""
-    if platform.system() != "Windows":
-        raise RuntimeError("Se requiere Windows con Microsoft Excel instalado.")
-    if any(k not in EDITABLES for k in cambios) or any(h not in DOCUMENTOS for h in seleccion):
-        raise ValueError("Se detectó una celda o documento no autorizado.")
-    if not seleccion:
-        raise ValueError("Selecciona al menos un documento.")
-    import pythoncom
-    import win32com.client
-    pythoncom.CoInitialize()
-    excel = None
-    wb = None
-    try:
-        with tempfile.TemporaryDirectory(prefix="alcanto_") as carpeta:
-            fuente = Path(carpeta) / "copia_temporal.xlsx"
-            fuente.write_bytes(contenido)
-            excel = win32com.client.DispatchEx("Excel.Application")
-            excel.Visible = False
-            excel.DisplayAlerts = False
-            excel.ScreenUpdating = False
-            excel.AutomationSecurity = 3  # Deshabilitar macros en automatización
-            excel.AskToUpdateLinks = False
-            wb = excel.Workbooks.Open(str(fuente), UpdateLinks=0, ReadOnly=False, AddToMru=False)
-            if wb.ReadOnly:
-                raise RuntimeError("No fue posible abrir la copia temporal para los cambios.")
-            entrada = wb.Worksheets("Datos Contrato")
-            for celda, nuevo in cambios.items():
-                rango = entrada.Range(celda)
-                if rango.HasFormula is None or bool(rango.HasFormula):
-                    raise ValueError("La celda " + celda + " tiene una fórmula y NO será modificada.")
-                rango.Value2 = nuevo
-            excel.CalculateFullRebuild()
-            paquete = io.BytesIO()
-            with ZipFile(paquete, "w", ZIP_DEFLATED) as zipf:
-                for indice, nombre in enumerate(seleccion, 1):
-                    nombre_archivo = re.sub(r"[^A-Za-z0-9._ -]", "_", nombre)
-                    destino = Path(carpeta) / f"{indice:02d}_{nombre_archivo}.pdf"
-                    wb.Worksheets(nombre).ExportAsFixedFormat(
-                        Type=0, Filename=str(destino), Quality=0,
-                        IncludeDocProperties=False, IgnorePrintAreas=False,
-                        OpenAfterPublish=False,
-                    )
-                    if not destino.is_file() or destino.stat().st_size < 100:
-                        raise RuntimeError("Excel no exportó " + nombre)
-                    zipf.write(destino, destino.name)
-                zipf.writestr("LEEME.txt", "Documentos para revisión e impresión. Confirmar datos, contenido y firmas.\n")
-            wb.Close(SaveChanges=False)
-            wb = None
-            return paquete.getvalue()
-    finally:
-        if wb is not None:
             try:
-                wb.Close(SaveChanges=False)
+                guardar("trabajadores",{"empresa_id":id_empresa,"valores":{k:v.strip() for k,v in valores.items()}})
+                st.success("Trabajador registrado.")
+                st.rerun()
             except Exception:
-                pass
-        if excel is not None:
+                st.error("No se pudo registrar al trabajador. Revisa la conexión de almacenamiento.")
+    return elegida,None
+
+
+def descargar_documentos(template: bytes, empresa:dict, trabajador:dict, cat:dict) -> None:
+    st.markdown("### 3. Documentos disponibles y PDF")
+    datos={**empresa.get("valores",{}),**trabajador.get("valores",{})}
+    estados=estado_documental(datos, cat["pts_completos"])
+    hechos=sum(1 for e in estados if e["estado"]=="Datos completos / revisar")
+    c1,c2,c3=st.columns(3)
+    c1.metric("Documentos con datos mínimos",hechos)
+    c2.metric("Por completar",len(estados)-hechos)
+    c3.metric("Total de documentos",len(estados))
+    for item in estados:
+        nombre=item["documento"]
+        estado=item["estado"]
+        texto=", ".join(item["faltan"])
+        with st.expander(("✅ " if estado.startswith("Datos completos") else "⚠️ ")+nombre+" — "+estado):
+            if texto: st.write("Campos necesarios: "+texto)
+            else: st.write("Datos de identificación completos; sigue pendiente revisar legalidad, firmas y contenido.")
+            st.caption(item["observacion"])
+    disponibles=[e for e in estados if e["estado"]=="Datos completos / revisar"]
+    nombres={e["hoja"]: e["documento"] for e in disponibles}
+    seleccion=st.multiselect("Selecciona los documentos que deseas convertir a PDF",
+        list(nombres),format_func=lambda k:nombres[k])
+    avisar=st.checkbox("Confirmo que los datos son correctos, que conozco que el archivo se enviará por HTTPS a Aspose.Cells Cloud y revisaré los PDF antes de su uso.")
+    cloud_id=secret("ASPOSE_CLIENT_ID")
+    cloud_key=secret("ASPOSE_CLIENT_SECRET")
+    if not cloud_id or not cloud_key:
+        st.warning("Falta conectar Aspose.Cells Cloud en los secretos de Streamlit. Los PDFs online no se pueden generar todavía.")
+    if st.button("Generar PDF online para imprimir", type="primary",disabled=not (seleccion and avisar and cloud_id and cloud_key)):
+        try:
+            with st.spinner("Preparando copia temporal del Excel sin modificar ninguna fórmula…"):
+                copia=generar_copia(template,datos)
+                motor=AsposeCellsCloud(cloud_id,cloud_key)
+            zipdata=BytesIO()
+            total_paginas=0
+            with ZipFile(zipdata, "w", ZIP_DEFLATED) as paquete:
+                progreso=st.progress(0.0)
+                for i,hoja in enumerate(seleccion,1):
+                    resultado=motor.convertir_hoja(copia,hoja)
+                    safe=hoja.replace(" ","_").replace(".","")
+                    paquete.writestr(f"{i:02d}_{safe}.pdf",resultado.contenido)
+                    total_paginas+=resultado.paginas
+                    progreso.progress(i/len(seleccion))
+                paquete.writestr("IMPORTANTE.txt",
+                    "ALCANTO: PDFs pendientes de revisión de datos, firmas y cumplimiento legal.\n"
+                    "El documento original XLSX y sus fórmulas no fueron modificados.\n")
+            st.session_state["pdf_generados"] = zipdata.getvalue()
+            st.session_state["pdf_firma"] = sha256((trabajador["id"]+"|"+"|".join(seleccion)).encode()).hexdigest()
+            st.success(f"Conversión finalizada: {len(seleccion)} documentos, {total_paginas} páginas. Confirma el resultado antes de imprimir.")
+        except (ErrorDeConversion, PlantillaInvalida, ValueError) as error:
+            st.session_state.pop("pdf_generados",None)
+            st.error(str(error))
+        except Exception:
+            st.session_state.pop("pdf_generados",None)
+            st.error("La conversión no pudo completarse. Revisa las credenciales, cuotas y funcionamiento del proveedor.")
+    firma=sha256((trabajador["id"]+"|"+"|".join(seleccion)).encode()).hexdigest()
+    if st.session_state.get("pdf_firma")==firma and st.session_state.get("pdf_generados"):
+        st.download_button("⬇ Descargar documentos PDF para imprimir",data=st.session_state["pdf_generados"],
+            file_name="ALCANTO_documentos_imprimibles.zip",mime="application/zip",type="primary")
+
+
+def main() -> None:
+    inyectar_css()
+    ingreso()
+    st.markdown("<div class='alcanto-top'><strong>PROYECTO ALCANTO</strong><p>Empresas, trabajadores, subcontratos y prevención | Automático y online</p></div>",unsafe_allow_html=True)
+    with st.sidebar:
+        st.markdown("## 📄 ALCANTO")
+        st.caption("Gestiona el sistema sin instalar Excel")
+        if st.button("Cerrar sesión"):
+            st.session_state.clear()
+            st.rerun()
+        st.divider()
+        st.markdown("**Almacenamiento**")
+        st.write("🔐 Privado en la nube" if almacen() else "⚠️ Temporal en esta sesión")
+        st.markdown("**Motor de impresión**")
+        st.write("✅ Credenciales configuradas" if secret("ASPOSE_CLIENT_ID") and secret("ASPOSE_CLIENT_SECRET") else "⚠️ Aspose no configurado")
+        st.caption("No guardar archivos con RUT en GitHub público.")
+    template=plantilla_actual()
+    if not template:
+        st.subheader("Configuración inicial de tu plantilla")
+        st.info("Carga UNA VEZ el XLSX del proyecto. En la nube se guarda como plantilla privada si conectas un bucket S3. El usuario no necesita Microsoft Excel para operar.")
+        nuevo=st.file_uploader("Archivo ALCANTO original (.xlsx, máximo 25 MB)",type=["xlsx"])
+        confirmado=st.checkbox("Confirmo que estoy autorizado a tratar los datos personales del libro y, cuando genere PDFs, a enviarlos al procesador cloud configurado.")
+        if nuevo and confirmado and st.button("Validar y cargar plantilla",type="primary"):
             try:
-                excel.Quit()
+                data=nuevo.getvalue()
+                resumen=verificar_plantilla(data)
+                if almacen():
+                    almacen().guardar_plantilla(data)
+                st.session_state.plantilla_privada=data
+                st.success(f"Plantilla validada: {len(resumen['hojas'])} hojas. No se cambió el archivo.")
+                st.rerun()
+            except PlantillaInvalida as error:
+                st.error(str(error))
             except Exception:
-                pass
-        pythoncom.CoUninitialize()
-
-
-st.set_page_config(page_title="ALCANTO | PDF imprimibles", page_icon="📄", layout="wide")
-st.title("PROYECTO ALCANTO")
-st.caption("Impresión de contratos y prevención usando el motor y formatos del Excel original")
-st.info("El archivo original no se modifica. Se trabaja con una copia temporal que se elimina al terminar.")
-if platform.system() != "Windows":
-    st.warning("La generación de PDF requiere ejecutar esta aplicación LOCALMENTE en Windows con Excel de escritorio.")
-entrada = st.file_uploader("Selecciona tu Excel ALCANTO (.xlsx)", type=["xlsx"])
-if entrada is None:
-    st.markdown("Carga tu planilla para consultar documentos disponibles y preparar PDF de impresión.")
-    st.stop()
-contenido = entrada.getvalue()
-if len(contenido) > 40 * 1024 * 1024:
-    st.error("El archivo supera los 40 MB permitidos.")
-    st.stop()
-try:
-    datos, matriz, anexo = inspeccionar(contenido)
-except Exception as exc:
-    st.error("No se pudo leer el archivo ALCANTO: " + str(exc))
-    st.stop()
-
-st.subheader("1. Datos del trabajador y empresa")
-modo = st.radio("Elige cómo trabajar", ["Usar datos que ya están completos en el Excel", "Completar una copia temporal"], index=0)
-cambios = {}
-if modo == "Completar una copia temporal":
-    st.caption("Dejar un campo en blanco mantiene el dato que ya está en el Excel; no se mostrarán los datos personales existentes.")
-    grupos = {
-        "Empresa y representante": list(EDITABLES.items())[:10],
-        "Trabajador": list(EDITABLES.items())[10:19],
-        "Contrato, obra y remuneración": list(EDITABLES.items())[19:],
-    }
-    for grupo, campos in grupos.items():
-        with st.expander(grupo, expanded=(grupo == "Empresa y representante")):
-            col1, col2 = st.columns(2)
-            for i, (ref, etiqueta) in enumerate(campos):
-                with (col1 if i % 2 == 0 else col2):
-                    valor = st.text_input(etiqueta + " (" + ref + ")", key="campo_" + ref)
-                    if valor.strip():
-                        if ref == "C32":
-                            if not valor.strip().isdigit():
-                                st.error("Sueldo C32: usar números sin puntos.")
-                                st.stop()
-                            cambios[ref] = int(valor.strip())
-                        else:
-                            cambios[ref] = valor.strip()
-    st.warning("Las celdas de fórmula C30, C33, C36, C37 y C40 NO se editan. La fecha HOY() cambia con el día.")
-
-st.subheader("2. Documentos disponibles con los datos actuales")
-filas = estados(datos, matriz, anexo, cambios)
-st.dataframe(filas, use_container_width=True, hide_index=True)
-st.caption("GENERABLE / REVISAR no significa que el documento esté firmado o legalmente validado.")
-validos = [e["Documento"] for e in filas if e["Estado"] == "GENERABLE / REVISAR"]
-
-st.subheader("3. Generar PDF para imprimir")
-documentos = st.multiselect("Selecciona documentos", DOCUMENTOS, default=validos)
-bloqueados = [h for h in documentos if h not in validos]
-if bloqueados:
-    st.error("Documentos con datos o contenido incompleto: " + ", ".join(bloqueados))
-revision = st.checkbox("Revisaré información, fechas, prevención y firmas antes de imprimir.")
-clave = hashlib.sha256((hashlib.sha256(contenido).hexdigest() + repr(sorted(cambios.items())) + repr(documentos)).encode()).hexdigest()
-if st.session_state.get("firma_zip") != clave:
-    st.session_state.pop("zip_impresion", None)
-if st.button("Crear PDF imprimibles", type="primary", disabled=not (revision and documentos and not bloqueados)):
+                st.error("No se pudo guardar la plantilla. Revisa los permisos del almacenamiento privado.")
+        st.stop()
     try:
-        with st.spinner("Microsoft Excel está preparando los PDF…"):
-            archivo_zip = pdf_en_excel(contenido, documentos, cambios)
-        st.session_state["zip_impresion"] = archivo_zip
-        st.session_state["firma_zip"] = clave
-        st.success("PDF generados. El original se mantiene sin cambios.")
-    except Exception as exc:
-        st.error("No se pudo imprimir: " + str(exc))
-if st.session_state.get("zip_impresion"):
-    st.download_button("Descargar ZIP de PDF para imprimir", data=st.session_state["zip_impresion"],
-                       file_name="ALCANTO_documentos_para_imprimir.zip", mime="application/zip")
-st.divider()
-st.caption("USO LOCAL exclusivamente. No publicar en una plataforma web: los archivos contienen datos personales.")
+        catalogo = catalogos(template)
+    except Exception:
+        st.error("La matriz o los catálogos del Excel no se pueden leer. No se modificará el archivo.")
+        st.stop()
+    if not almacen():
+        st.warning("Modo sesión: los registros desaparecerán cuando el servidor se reinicie. Configura un bucket S3 privado en Streamlit Secrets para conservarlos online.")
+    st.markdown("<div class='alcanto-box'>La fórmula y la presentación del Excel original se respetan. Los documentos se obtienen desde una copia temporal sin sobrescribir la plantilla.</div>",unsafe_allow_html=True)
+    tab1,tab2 = st.tabs(["📋 Registrar empresas y trabajadores", "🖨️ Documentación e impresión"])
+    with tab1:
+        empresas=formulario_empresa()
+        empresa,trabajador=formulario_trabajador(empresas,catalogo)
+    with tab2:
+        empresas=listar("empresas")
+        todos=listar("trabajadores")
+        if not empresas or not todos:
+            st.info("Guarda una empresa y un trabajador en la primera pestaña.")
+        else:
+            mapa={t["id"]:t for t in todos}
+            elegido=st.selectbox("Trabajador",options=list(mapa),format_func=lambda k:mapa[k].get("valores",{}).get("C17","Trabajador"))
+            worker=mapa[elegido]
+            company=next((e for e in empresas if e["id"]==worker.get("empresa_id")),None)
+            if company:
+                st.caption("Empresa: "+company.get("valores",{}).get("C5",""))
+                descargar_documentos(template,company,worker,catalogo)
+            else:
+                st.error("No se encontró la empresa vinculada a este trabajador.")
+    st.caption("Alcanto online · Contratos, IRL, PTS y registros. Es obligatorio revisar los PDF antes de imprimir, firmar o entregar.")
+
+
+if __name__ == "__main__":
+    main()
