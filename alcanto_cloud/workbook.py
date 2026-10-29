@@ -151,11 +151,12 @@ def generar_copia(datos_originales: bytes, entradas: dict[str, str], *, limpiar_
     Si limpiar_previos=True, borra todos los campos de entrada ANTES de aplicar
     los nuevos datos, para evitar imprimir información de un trabajador anterior.
     """
-    if not isinstance(entradas, dict) or any(c not in CAMPOS for c in entradas):
+    if not isinstance(entradas, dict) or any(c not in CAMPOS and c != "ANEXO_M4" for c in entradas):
         raise ValueError("Intento de editar una celda no autorizada.")
     if any(not isinstance(v,str) for v in entradas.values()):
         raise ValueError("Todos los datos deben ser texto para validarse correctamente.")
-    seleccion = {ref: entradas.get(ref, "").strip() for ref in CAMPOS} if limpiar_previos else entradas
+    seleccion = {ref: entradas.get(ref, "").strip() for ref in CAMPOS} if limpiar_previos else {k:v for k,v in entradas.items() if k in CAMPOS}
+    fecha_prorroga = entradas.get("ANEXO_M4", "").strip()
     # Validar todos los valores ANTES de crear la copia.
     valores = {ref: _contenido(ref, v) for ref,v in seleccion.items()}
     with _abrir(datos_originales) as z:
@@ -171,6 +172,24 @@ def generar_copia(datos_originales: bytes, entradas: dict[str, str], *, limpiar_
             tag = re.sub(r'\s+t="[^"]*"', "", m.group(1))
             tag = tag[:-1] + (' t="inlineStr">' if tipo == "inlineStr" else '>')
             copia = copia[:m.start()] + tag + cuerpo + "</c>" + copia[m.end():]
+        # M4 de anexo es una fecha fija (no una fórmula), solo se cambia en la copia.
+        extension = None
+        if fecha_prorroga:
+            try:
+                fecha_obj = date.fromisoformat(fecha_prorroga)
+            except ValueError as exc:
+                raise ValueError("La nueva fecha de prórroga debe usar AAAA-MM-DD.") from exc
+            if not date(1901, 1, 1) <= fecha_obj <= date(2100, 12, 31):
+                raise ValueError("La fecha de prórroga está fuera de intervalo permitido.")
+            serial = (fecha_obj - date(1899, 12, 30)).days
+            extension = z.read("xl/worksheets/sheet4.xml").decode("utf-8")
+            ext_match = _celda("M4").search(extension)
+            if not ext_match:
+                raise PlantillaInvalida("No se encontró la fecha M4 del anexo de prórroga.")
+            if re.search(r"<f(?:\\s|>)", ext_match.group(2)):
+                raise PlantillaInvalida("La fecha M4 tiene fórmula: no se puede editar.")
+            tag = re.sub(r'\\s+t="[^"]*"', "", ext_match.group(1))
+            extension = extension[:ext_match.start()] + tag + f"<v>{serial}</v></c>" + extension[ext_match.end():]
         # Actualizar solamente indicadores de recálculo, sin modificar fórmulas.
         libro = z.read("xl/workbook.xml").decode("utf-8")
         flags = ' fullCalcOnLoad="1" forceFullCalc="1" calcMode="auto"'
@@ -185,6 +204,8 @@ def generar_copia(datos_originales: bytes, entradas: dict[str, str], *, limpiar_
                     content = copia.encode("utf-8")
                 elif member.filename == "xl/workbook.xml":
                     content = libro.encode("utf-8")
+                elif member.filename == "xl/worksheets/sheet4.xml" and extension is not None:
+                    content = extension.encode("utf-8")
                 else:
                     content = z.read(member.filename)
                 # Reutilizar metadatos de ZIP y el nivel de compresión de entrada.
