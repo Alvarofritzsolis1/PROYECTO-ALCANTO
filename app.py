@@ -181,6 +181,10 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
                 else:
                     valores[ref]=st.text_input(f"{titulo} · {ref}",max_chars=800,key="nuevo_"+ref,
                                              placeholder="AAAA-MM-DD" if ref=="C20" else None)
+        valores["ANEXO_M4"] = st.text_input(
+            "Nueva fecha de término para prórroga (AAAA-MM-DD) · Anexo M4",
+            key="nuevo_anexo_m4", placeholder="2026-12-31",
+        )
         creado=st.form_submit_button("Registrar trabajador",type="primary")
     if creado:
         if not all(valores.get(x, "").strip() for x in ("C17","C18","C29","D30")):
