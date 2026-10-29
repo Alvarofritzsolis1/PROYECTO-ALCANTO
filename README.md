@@ -1,3 +1,15 @@
+# PROYECTO ALCANTO — Plataforma Streamlit 100% online
+
+**Esta es la versión activa del sistema.** Usa el [app.py de la raíz](app.py) y funciona desde un navegador; no exige instalar Excel ni Windows al usuario. Sus hojas y fórmulas se conservan en una plantilla XLSX privada y los PDF se solicitan a Aspose.Cells Cloud cuando el servicio está configurado.
+
+**[Ver cómo desplegar en Streamlit Community Cloud](docs/07_STREAMLIT_CLOUD.md)** · [Entrar a Streamlit](https://share.streamlit.io/)
+
+**Estado de verificación:** revisión del archivo real con **17 hojas y 310 fórmulas**, seis pruebas estructurales aprobadas. **Aún pendiente**: conectar credenciales de Aspose y almacenamiento privado, desplegar en la cuenta Streamlit del usuario y validar los PDFs de las diez hojas. No se garantiza equivalencia visual hasta realizar estas comprobaciones.
+
+**Importante:** el código publicado es público, pero el Excel con RUT y nombres **no se ha subido a GitHub**. La versión Windows se conserva en `legacy/app_windows.py` y el prototipo Next.js en `web/`; ninguno es el punto de entrada del despliegue Streamlit.
+
+---
+
 # PROYECTO ALCANTO
 ### Automatización de documentación laboral y prevención para empresas contratistas
 
