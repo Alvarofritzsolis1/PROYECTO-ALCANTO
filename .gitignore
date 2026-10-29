@@ -1,0 +1,26 @@
+# Archivos operativos y datos personales: NO subir al repositorio público.
+*.xlsx
+*.xls
+*.xlsm
+*.xlsb
+*.csv
+*.pdf
+*.doc
+*.docx
+*.zip
+*.7z
+*.rar
+*.bak
+~$*
+.DS_Store
+__pycache__/
+*.pyc
+.env
+.env.*
+!*.example
+# Archivos de respaldo y exportaciones
+respaldos/
+original/
+datos_reales/
+exportaciones/
+salidas/
