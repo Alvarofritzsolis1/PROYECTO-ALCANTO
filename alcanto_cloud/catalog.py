@@ -3,6 +3,43 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+# Opciones leídas de la versión original de «Datos Contrato» y «MATRIZ PTS».
+# Se distribuyen como catálogo público sin RUT ni antecedentes personales; la
+# plantilla privada es necesaria SOLO para recalcular e imprimir documentos.
+OBRAS_PREDEFINIDAS = (
+    "Lomas Verdes",
+    "Brisas de Junquillar",
+    "Concepción",
+)
+DIRECCIONES_OBRA = {
+    "Lomas Verdes": "Av. Jorge Alessandri 866 Interior, Lomas Verdes (detrás Hotel Diego de Almagro)",
+    "Brisas de Junquillar": "Ruta 160, Km 14,2 Interior, San Pedro de la Paz",
+    "Concepción": "Av. Quiñenco N° 4001, Escuadrón, Sector Praderas de Coronel",
+}
+CARGOS_PREDEFINIDOS = (
+    "ALBAÑIL", "GASFITER", "PINTOR", "CARPINTERO", "ENFIERRADOR",
+    "TECHADOR", "CERAMISTA", "OPERARIO DE HORMIGON", "MOLDAJERO",
+    "ALUMINERO", "OPERARIO DE URBANIZACION", "IMPERMEABILIZADOR",
+    "ESTRUCTURERO METÁLICO", "NIVELADOR DE PISOS", "ALFOMBRERO",
+    "HOJALATERO", "ELETRICO", "INSTALADOR DE EIFS", "CAMARERO",
+    "INSTALADOR DE PANDERETAS / VIBRADOS", "CARPINTERIA EN TERMINACIONES",
+    "MUEBLISTA", "PAISAJISTA", "OPERARIO DE OBRA GRUESA", "SOLDADOR",
+)
+PTS_EXISTENTES = frozenset({"albañil", "gasfiter", "pintor"})
+RENTA_BASE_REFERENCIA = 553_553
+JORNADA_REFERENCIA = 42
+PAGO_REFERENCIA = "MENSUALMENTE"
+
+def catalogo_predefinido() -> dict:
+    """Catálogos funcionales aun cuando no esté provisionado el Excel interno."""
+    return {
+        "cargos": list(CARGOS_PREDEFINIDOS),
+        "obras": list(OBRAS_PREDEFINIDAS),
+        "direcciones": dict(DIRECCIONES_OBRA),
+        "pts_completos": set(PTS_EXISTENTES),
+        "registros_pts": 26,
+    }
+
 CAMPOS_EMPRESA = {
     "C5": "Nombre del empleador / empresa",
     "C6": "RUT empleador",
