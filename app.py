@@ -20,6 +20,7 @@ from alcanto_cloud.catalog import (
     CAMPOS_EMPRESA, CAMPOS_TRABAJADOR, DOCUMENTOS, estado_documental,
 )
 from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf
+from alcanto_cloud.storage import AlmacenPrivado
 from alcanto_cloud.workbook import (
     PlantillaInvalida, catalogos, generar_copia, verificar_plantilla, _abrir, _shared_strings, _leer_celdas,
 )
@@ -35,13 +36,19 @@ def secret(nombre: str) -> str:
 
 
 def almacen() -> None:
-    """Modo público sin contraseñas: nunca abrir el almacenamiento compartido.
-
-    Todos los datos de empresa, trabajadores y plantilla quedan únicamente en
-    st.session_state del navegador actual. Esto impide que un visitante vea
-    registros que pertenecen a otro usuario.
-    """
+    """Los datos personales son exclusivos de la sesión: NO compartir S3."""
     return None
+
+
+def almacen_plantilla() -> AlmacenPrivado | None:
+    """Acceso de servidor y únicamente lectura al modelo XLSX maestro."""
+    try:
+        cfg = st.secrets.get("storage", None)
+    except (FileNotFoundError, KeyError):
+        cfg = None
+    if not cfg:
+        return None
+    return AlmacenPrivado(dict(cfg))
 
 
 def guardar(tipo: str, contenido: dict) -> str:
@@ -77,19 +84,39 @@ def inyectar_css() -> None:
 
 
 def plantilla_actual() -> bytes | None:
+    """El Excel es un recurso interno del servidor, no una carga del usuario.
+
+    Se busca exclusivamente en S3 privado preconfigurado o en una ruta
+    preinstalada para despliegues controlados. Ningún usuario puede subir
+    ni descargar la plantilla maestra desde esta aplicación.
+    """
     if st.session_state.get("plantilla_privada"):
         return st.session_state.plantilla_privada
-    store = almacen()
-    if store:
+    modelo = None
+    privado = almacen_plantilla()
+    if privado is not None:
         try:
-            data = store.obtener_plantilla()
-            if data:
-                verificar_plantilla(data)
-                st.session_state.plantilla_privada = data
-                return data
+            modelo = privado.obtener_plantilla()
         except Exception:
-            st.warning("No se pudo recuperar la plantilla privada de la nube. Revisa la conexión S3.")
-    return None
+            st.error("No se pudo abrir el Excel interno desde el almacenamiento privado.")
+            return None
+    else:
+        ruta = Path(__file__).resolve().parent / "plantillas" / "ALCANTO_MODELO.xlsx"
+        if ruta.is_file():
+            try:
+                modelo = ruta.read_bytes()
+            except OSError:
+                st.error("No se puede leer el modelo interno.")
+                return None
+    if modelo is None:
+        return None
+    try:
+        verificar_plantilla(modelo)
+        st.session_state.plantilla_privada = modelo
+        return modelo
+    except PlantillaInvalida:
+        st.error("La plantilla interna no coincide con las 17 hojas de ALCANTO.")
+        return None
 
 
 def campo(ref: str, titulo: str, opciones: list[str] | None = None):
@@ -249,21 +276,9 @@ def main() -> None:
         st.caption("No guardar archivos con RUT en GitHub público.")
     template=plantilla_actual()
     if not template:
-        st.subheader("Configuración inicial de tu plantilla")
-        st.info("Carga la plantilla XLSX en esta sesión del navegador. No se guarda en GitHub ni se comparte con otros visitantes. Para evitar exponer información personal, la carga y los registros se eliminan al finalizar o reiniciar la sesión.")
-        nuevo=st.file_uploader("Archivo ALCANTO original (.xlsx, máximo 25 MB)",type=["xlsx"])
-        confirmado=st.checkbox("Confirmo que estoy autorizado a tratar los datos personales del libro y, cuando genere PDFs, a enviarlos al procesador cloud configurado.")
-        if nuevo and confirmado and st.button("Validar y cargar plantilla",type="primary"):
-            try:
-                data=nuevo.getvalue()
-                resumen=verificar_plantilla(data)
-                st.session_state.plantilla_privada=data
-                st.success(f"Plantilla validada: {len(resumen['hojas'])} hojas. No se cambió el archivo.")
-                st.rerun()
-            except PlantillaInvalida as error:
-                st.error(str(error))
-            except Exception:
-                st.error("No se pudo guardar la plantilla. Revisa los permisos del almacenamiento privado.")
+        st.error("ALCANTO aún no tiene instalada la plantilla interna de documentos.")
+        st.info("No tienes que subir ningún Excel. El administrador debe instalar una sola vez el archivo maestro en el almacenamiento privado del servidor. Después solo completas los formularios para generar documentos.")
+        st.caption("Configuración técnica: docs/09_DESPLIEGUE_SIN_SUBIR_EXCEL.md")
         st.stop()
     try:
         catalogo = catalogos(template)
