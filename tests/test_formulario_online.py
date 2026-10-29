@@ -21,7 +21,17 @@ class FormularioOnline(unittest.TestCase):
         self.assertIn("template and seleccion and avisar and cloud_id and cloud_key", APP)
 
     def test_formularios_siguen_disponibles_sin_modelo(self):
-        self.assertIn('catalogo={"cargos":[], "obras":[], "pts_completos":set()}', APP)
+        self.assertIn('catalogo = catalogo_predefinido()', APP)
+
+    def test_opciones_del_excel_se_muestran_en_formulario(self):
+        self.assertIn('options=[""] + list(cat["obras"])', APP)
+        self.assertIn('options=[""] + list(cat["cargos"])', APP)
+        self.assertIn("RENTA_BASE_REFERENCIA", APP)
+        self.assertIn("JORNADA_REFERENCIA", APP)
+        self.assertIn("PAGO_REFERENCIA", APP)
+
+    def test_obra_vinculada_a_su_direccion(self):
+        self.assertIn('cat["direcciones"][obra_actual]', APP)
 
 
 if __name__ == "__main__":
