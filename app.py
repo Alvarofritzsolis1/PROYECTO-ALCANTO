@@ -178,10 +178,17 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
         for i,(ref,titulo) in enumerate(CAMPOS_TRABAJADOR.items()):
             with cols[i%2]:
                 if ref == "C29":
-                    valores[ref] = st.selectbox(
-                        f"{titulo} · {ref}", options=[""] + list(cat["cargos"]),
+                    cargo_seleccionado = st.selectbox(
+                        f"{titulo} · {ref}",
+                        options=[""] + list(cat["cargos"]) + ["OTRO (ESPECIFICAR)"],
                         key="nuevo_"+ref,
-                        help="Especialidades originales de MATRIZ PTS; se guarda la clave exacta del Excel.",
+                        help="Los 25 cargos son claves exactas de MATRIZ PTS. Un cargo nuevo no tendrá PTS hasta incorporarlo a la matriz.",
+                    )
+                    valores[ref] = (
+                        st.text_input("Especifica el cargo no incluido en la matriz",
+                                      key="nuevo_cargo_libre", max_chars=200).strip()
+                        if cargo_seleccionado == "OTRO (ESPECIFICAR)"
+                        else cargo_seleccionado
                     )
                 elif ref == "D30":
                     valores[ref] = st.selectbox(
@@ -215,7 +222,13 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
                         key="nuevo_"+ref,
                         help="Selecciona únicamente las obras de traslado efectivamente autorizadas.",
                     )
-                    valores[ref] = "Faenas " + ", ".join(destinos) if destinos else ""
+                    otro_destino = st.text_input(
+                        "Otras faenas o condiciones autorizadas (opcional)",
+                        key="nuevo_destino_libre", max_chars=500,
+                        help="El Excel original permite texto libre en C43; no se pierde esa posibilidad.",
+                    ).strip()
+                    todos = [*destinos, *([otro_destino] if otro_destino else [])]
+                    valores[ref] = "Faenas " + ", ".join(todos) if todos else ""
                 else:
                     valores[ref] = st.text_input(
                         f"{titulo} · {ref}", max_chars=800,key="nuevo_"+ref,
