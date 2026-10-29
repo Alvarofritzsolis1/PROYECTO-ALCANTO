@@ -9,6 +9,9 @@ import argparse
 import os
 from hashlib import sha256
 from pathlib import Path
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from alcanto_cloud.workbook import generar_copia, verificar_plantilla
 
