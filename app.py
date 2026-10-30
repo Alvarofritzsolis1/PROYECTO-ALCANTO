@@ -1,8 +1,8 @@
-"""PROYECTO ALCANTO — plataforma 100% online para Streamlit Community Cloud.
+"""PROYECTO ALCANTO — plataforma Streamlit 100% online.
 
-No necesita Microsoft Excel ni archivos en el computador durante el uso diario.
-Las 17 hojas y fórmulas están en una plantilla XLSX privada. Los cambios se
-aplican SOLO a una copia en memoria. Para un PDF se requiere Aspose.Cells Cloud.
+El PDF web se genera directamente sin Excel ni Aspose (maquetación web).
+Si el servidor tiene un modelo XLSX privado y Aspose configurados, se puede
+exportar también desde la copia original del Excel sin alterar sus fórmulas.
 """
 from __future__ import annotations
 
@@ -420,11 +420,15 @@ def main() -> None:
         st.markdown("**Almacenamiento**")
         st.write("🕒 Temporal y separado por visitante")
         st.markdown("**Motor de impresión**")
-        st.write("✅ Credenciales configuradas" if secret("ASPOSE_CLIENT_ID") and secret("ASPOSE_CLIENT_SECRET") else "⚠️ Aspose no configurado")
+        st.write("✅ PDF web directo habilitado")
+        st.caption("Exportación desde el Excel original: " +
+                   ("disponible" if secret("ASPOSE_CLIENT_ID") and secret("ASPOSE_CLIENT_SECRET")
+                    else "opcional / no configurada"))
         st.caption("No guardar archivos con RUT en GitHub público.")
     template=plantilla_actual()
     if not template:
-        st.warning("El Excel interno todavía no está instalado en el servidor. Puedes registrar empresas y trabajadores; para generar PDF el administrador debe instalarlo una sola vez. No necesitas subir archivos desde esta página.")
+        st.info("PDF web listo para generar y descargar. El modelo Excel original no está instalado: "
+                "la exportación fiel desde la planilla queda opcional, pero la impresión web funciona sin él.")
         catalogo = catalogo_predefinido()
     else:
         try:
@@ -435,7 +439,9 @@ def main() -> None:
         else:
             catalogo["direcciones"] = catalogo_predefinido()["direcciones"]
     st.info("Modo sin contraseña: cada visitante usa su propia sesión temporal. Los registros no se comparten y se pierden al cerrar o reiniciar la sesión. No existe almacenamiento histórico persistente.")
-    st.markdown("<div class='alcanto-box'>La fórmula y la presentación del Excel original se respetan. Los documentos se obtienen desde una copia temporal sin sobrescribir la plantilla.</div>",unsafe_allow_html=True)
+    st.markdown("<div class='alcanto-box'>Genera PDFs web imprimibles sin instalar Excel. "
+            "El archivo XLSX original y sus fórmulas no se modifican. El formato web es diferente "
+            "del diseño original de Excel y requiere revisión antes de firmar.</div>", unsafe_allow_html=True)
     tab1,tab2 = st.tabs(["📋 Registrar empresas y trabajadores", "🖨️ Documentación e impresión"])
     with tab1:
         empresas=formulario_empresa()
