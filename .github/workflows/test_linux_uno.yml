@@ -1,0 +1,33 @@
+name: Verificar dependencias Linux de impresión XLSX
+
+on:
+  pull_request:
+    paths:
+      - "packages.txt"
+      - "scripts/uno_sheet_export.py"
+      - "alcanto_cloud/pdf_excel_local.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test-uno:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Instalar los paquetes del motor tal como en Streamlit Cloud
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends libreoffice-calc python3-uno fonts-liberation
+      - name: Comprobar controlador del sistema sin abrir archivos privados
+        run: |
+          /usr/bin/python3 -c "import uno; print('OK: python3-uno')"
+          soffice --version
+      - name: Sintaxis del proceso aislado
+        run: /usr/bin/python3 -m py_compile scripts/uno_sheet_export.py
+      - name: Probar el motor financiero de texto
+        run: |
+          python -m pip install -r requirements.txt
+          python -m unittest tests.test_pdf_excel_local -v
