@@ -1,0 +1,3 @@
+libreoffice-calc
+python3-uno
+fonts-liberation

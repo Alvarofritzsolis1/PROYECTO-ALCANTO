@@ -6,15 +6,18 @@
 
 **Autocompletado:** el trabajador hereda la obra seleccionada en la empresa y su dirección se obtiene del catálogo original. Renta sugerida, jornada y cargos predefinidos se pueden ajustar.
 
-**Dos modos de exportación:**
-- **PDF web inmediato** (opción predeterminada): no depende de Excel ni Aspose, produce un diseño web imprimible para los 10 tipos documentales.
-- **PDF desde el Excel original** (opcional): requiere instalar una plantilla privada y credenciales Aspose en el servidor. Mantiene las fórmulas y pretende reproducir la impresión original, pero su fidelidad aún no ha sido validada.
+**Tres opciones de exportación según la configuración disponible:**
+- **PDF desde las hojas originales XLSX, con LibreOffice/UNO en Linux:** reproduce la estructura y el contenido del Excel original. No necesita Aspose ni Excel instalado en el equipo del usuario. Requiere que el administrador provisione **una sola vez la plantilla privada** en el servidor. Probado con diez tipos de documentos, pero **no certificado visualmente al 100 % frente a Microsoft Excel**.
+- **PDF web inmediato:** siempre disponible como **borrador resumido**, sin XLSX, para revisión. No tiene las cláusulas y matrices completas del Excel.
+- **Aspose Cloud:** exportación alternativa con credenciales; su equivalencia aún no ha sido validada.
+
+**Importante:** la descarga en la aplicación pública Streamlit NO está verificada sin su URL exacta. La plataforma no deberá anunciar equivalencia ni disponibilidad del motor XLSX si falta la plantilla o LibreOffice.
 
 **Límite esencial:** los PDF web **no son idénticos en formato ni en contenido técnico completo a las salidas Excel**; son documentos resumidos que requieren revisión laboral y preventiva antes de firmar. Los 23 PTS pendientes no se habilitan como si estuvieran completos. El XLSX maestro y todas sus fórmulas permanecen intactos.
 
 **Privacidad:** sin contraseña cada visitante utiliza una sesión temporal aislada; no existe historial compartido ni persistente. Los datos reales de trabajadores nunca se suben al repositorio público.
 
-**[Guía para usar PDF web](docs/12_PDF_WEB_SIN_ASPOSE.md)** · **[Desplegar con Streamlit Cloud](docs/07_STREAMLIT_CLOUD.md)** · **[Auditoría 150 casos](docs/11_AUDITORIA_150_PRUEBAS.md)** · [Abrir Streamlit](https://share.streamlit.io/)
+**[Auditoría del motor Excel original y estado de producción](docs/13_PARIDAD_XLSX_IMPRESION.md)** · **[Guía PDF web](docs/12_PDF_WEB_SIN_ASPOSE.md)** · **[Desplegar con Streamlit Cloud](docs/07_STREAMLIT_CLOUD.md)** · **[Auditoría 150 casos](docs/11_AUDITORIA_150_PRUEBAS.md)** · [Abrir Streamlit](https://share.streamlit.io/)
 
 **Pruebas:** GitHub Actions ejecuta 150 pruebas documentales más pruebas que generan y abren los 10 PDF con datos ficticios y un recorrido completo de formulario en Streamlit.
 
