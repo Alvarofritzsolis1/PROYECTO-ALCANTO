@@ -1,0 +1,54 @@
+name: PDF real descargado desde Chromium
+
+on:
+  push:
+    branches:
+      - main
+      - fix/pdf-download-browser-e2e-20261030
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  navegador-pdf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Código
+        uses: actions/checkout@v4
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias y Chromium
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install "playwright>=1.49,<2"
+          python -m playwright install --with-deps chromium
+      - name: Iniciar Streamlit y esperar estado saludable
+        shell: bash
+        run: |
+          python -m streamlit run app.py --server.address 127.0.0.1 --server.port 8501 --server.headless true > /tmp/alcanto_streamlit.log 2>&1 &
+          echo $! > /tmp/alcanto_streamlit.pid
+          for i in $(seq 1 50); do
+            if curl -fsS http://127.0.0.1:8501/_stcore/health >/dev/null; then
+              echo "Streamlit saludable en puerto 8501"
+              exit 0
+            fi
+            sleep 2
+          done
+          cat /tmp/alcanto_streamlit.log
+          exit 1
+      - name: Descargar PDF desde navegador real
+        run: python tests/browser_download_smoke.py --url http://127.0.0.1:8501 --out /tmp/alcanto_browser_smoke
+      - name: Evidencia de prueba local y diagnóstico
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALCANTO-BROWSER-PDF-SMOKE
+          path: /tmp/alcanto_browser_smoke/
+          retention-days: 5
+      - name: Errores del servidor
+        if: failure()
+        run: tail -120 /tmp/alcanto_streamlit.log
