@@ -22,7 +22,8 @@ from alcanto_cloud.catalog import (
     PAGO_REFERENCIA,
 )
 from alcanto_cloud.documentos import estado_por_contexto, preparar_datos
-from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf
+from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf, validar_pdf
+from alcanto_cloud.pdf_web import generar_pdf_web, ErrorPDFWeb
 from alcanto_cloud.storage import AlmacenPrivado
 from alcanto_cloud.workbook import (
     PlantillaInvalida, catalogos, generar_copia, verificar_plantilla, _abrir, _shared_strings, _leer_celdas,
@@ -204,14 +205,17 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
                         else cargo_seleccionado
                     )
                 elif ref == "D30":
+                    obra_principal = elegida.get("valores", {}).get("D30", "")
+                    obras = [""] + list(cat["obras"])
+                    indice = obras.index(obra_principal) if obra_principal in obras else 0
                     valores[ref] = st.selectbox(
-                        f"{titulo} · {ref}", options=[""] + list(cat["obras"]),
+                        f"{titulo} · {ref}", options=obras, index=indice,
                         key="nuevo_"+ref,
-                        help="Las 3 obras corresponden a la lista D30 del Excel.",
+                        help="Se selecciona automáticamente la obra de la empresa, pero puedes cambiarla para este trabajador.",
                     )
                     obra_actual = valores[ref]
                     if obra_actual and cat.get("direcciones", {}).get(obra_actual):
-                        st.caption("Dirección vinculada automáticamente: " + cat["direcciones"][obra_actual])
+                        st.caption("Dirección de obra autocompletada: " + cat["direcciones"][obra_actual])
                 elif ref == "C31":
                     valores[ref] = str(st.number_input(
                         f"{titulo} · {ref}", min_value=1, max_value=60,
@@ -308,22 +312,31 @@ def descargar_documentos(
         key="confirmacion_aspose",
     )
     cloud_id, cloud_key = secret("ASPOSE_CLIENT_ID"), secret("ASPOSE_CLIENT_SECRET")
-    if not template:
-        st.warning("Falta instalar el modelo privado del Excel en el servidor. Los formularios funcionan, pero todavía no se pueden imprimir PDFs.")
-    if not cloud_id or not cloud_key:
-        st.warning("Falta configurar Aspose.Cells Cloud en Streamlit Secrets. Hasta entonces los PDF siguen deshabilitados.")
-    apto = bool(template and cloud_id and cloud_key and seleccion and avisar)
+    aspose_disponible = bool(template and cloud_id and cloud_key)
+    opciones_motor = ["PDF web inmediato · no requiere Excel ni claves"]
+    if aspose_disponible:
+        opciones_motor.append("PDF desde Excel original · Aspose Cloud")
+    motor_elegido = st.radio("Tipo de PDF", opciones_motor, horizontal=True,
+                             key="motor_pdf_documentacion")
+    usar_aspose = motor_elegido.startswith("PDF desde Excel")
+    if not aspose_disponible:
+        st.info("La descarga PDF web ya está disponible sin instalar el Excel interno ni configurar Aspose. "
+                "Reproduce el contenido principal en un diseño web imprimible; no es idéntica "
+                "al formato original de Excel. Revisa cláusulas, riesgos y firmas antes de su uso.")
+    apto = bool(seleccion and avisar)
     contexto = empresa["id"] + "|" + (trabajador["id"] if trabajador else "empresa") + "|" + cargo_pts
-    firma = sha256((contexto + "|" + "|".join(seleccion)).encode()).hexdigest()
+    firma = sha256((contexto + "|" + motor_elegido + "|" + str(confirma_jurada) + "|" + "|".join(seleccion)).encode()).hexdigest()
     if st.button("Generar PDF online para imprimir", type="primary", disabled=not apto):
         try:
-            motor = AsposeCellsCloud(cloud_id, cloud_key)
+            motor = AsposeCellsCloud(cloud_id, cloud_key) if usar_aspose else None
             bolsa = BytesIO()
             total_paginas = 0
-            with _abrir(template) as z:
-                nombre_previo = _leer_celdas(
-                    z, "xl/worksheets/sheet1.xml", ["C17"], _shared_strings(z)
-                )["C17"]
+            nombre_previo = ""
+            if usar_aspose and template is not None:
+                with _abrir(template) as z:
+                    nombre_previo = _leer_celdas(
+                        z, "xl/worksheets/sheet1.xml", ["C17"], _shared_strings(z)
+                    )["C17"]
             with ZipFile(bolsa, "w", ZIP_DEFLATED) as paquete:
                 progreso = st.progress(0.0)
                 for indice, hoja in enumerate(seleccion, 1):
@@ -340,8 +353,17 @@ def descargar_documentos(
                     )
                     if not vigente["generable"]:
                         raise ValueError("La información de " + hoja + " está incompleta o pendiente.")
-                    copia = generar_copia(template, datos)
-                    resultado = motor.convertir_hoja(copia, hoja)
+                    if usar_aspose:
+                        if not template or not motor:
+                            raise ErrorDeConversion("Motor de Excel sin configurar.")
+                        copia = generar_copia(template, datos)
+                        resultado = motor.convertir_hoja(copia, hoja)
+                    else:
+                        resultado = validar_pdf(
+                            generar_pdf_web(
+                                hoja, datos, confirma_jurada=confirma_jurada,
+                            ), hoja,
+                        )
                     verificar_identidad_pdf(
                         resultado, hoja,
                         (trabajador_datos or {}).get("C17", ""),
@@ -360,19 +382,28 @@ def descargar_documentos(
             st.session_state["pdf_generados"] = bolsa.getvalue()
             st.session_state["pdf_firma"] = firma
             st.success(f"Se generaron {len(seleccion)} documentos ({total_paginas} páginas). Revisa antes de imprimir.")
-        except (ErrorDeConversion, PlantillaInvalida, ValueError) as error:
+        except (ErrorDeConversion, PlantillaInvalida, ErrorPDFWeb, ValueError) as error:
             st.session_state.pop("pdf_generados", None)
             st.error(str(error))
         except Exception:
             st.session_state.pop("pdf_generados", None)
             st.error("El proveedor de conversión no pudo generar todos los documentos; revisa sus credenciales y cuota.")
     if st.session_state.get("pdf_firma") == firma and st.session_state.get("pdf_generados"):
-        st.download_button(
-            "⬇ Descargar documentos PDF para imprimir",
-            data=st.session_state["pdf_generados"],
-            file_name="ALCANTO_documentos_imprimibles.zip",
-            mime="application/zip", type="primary",
-        )
+        if len(seleccion) == 1:
+            with ZipFile(BytesIO(st.session_state["pdf_generados"])) as paquete_zip:
+                archivo = next(x for x in paquete_zip.namelist() if x.endswith(".pdf"))
+                pdf_unico = paquete_zip.read(archivo)
+            st.download_button(
+                "⬇ Descargar PDF listo para imprimir", data=pdf_unico,
+                file_name=archivo, mime="application/pdf", type="primary",
+                key="descarga_pdf_unico",
+            )
+        else:
+            st.download_button(
+                "⬇ Descargar documentos PDF (ZIP)", data=st.session_state["pdf_generados"],
+                file_name="ALCANTO_documentos_imprimibles.zip",
+                mime="application/zip", type="primary", key="descarga_pdf_zip",
+            )
 
 
 def main() -> None:
