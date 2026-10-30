@@ -89,11 +89,11 @@ DOCUMENTOS = (
     Documento("Anexo de prórroga", "Anexo extension contrato", ("C5", "C6", "C7", "C8", "C17", "C18", "ANEXO_M4"), "Ingresar la nueva fecha de término del anexo para generar la prórroga"),
     Documento("Inducción de prevención", "INDUCCION PREVENCION", ("C5", "C6", "C7", "C8", "C14", "D30")),
     Documento("Información de riesgos laborales (IRL)", "IRL", ("C5", "C6", "C17", "C18", "C29", "D30")),
-    Documento("Procedimiento de trabajo seguro (PTS)", "PTS.", ("C5", "C6", "C7", "C8", "C29"), "Necesita contenido técnico D:T para el cargo"),
+    Documento("Procedimiento de trabajo seguro (PTS)", "PTS.", ("C5", "C6", "C7", "C8", "C10", "C29"), "Necesita contenido técnico D:T para el cargo"),
     Documento("Constancia de entrega PTS", "ENTREGA PTS", ("C5", "C6", "C17", "C18", "C29")),
     Documento("Constancia de entrega EPP", "Registros Entrega EPP", ("C5", "C6", "C17", "C18", "C29", "D30")),
     Documento("Recepción de reglamento interno", "REGLAMENTO INTERNO", ("C5", "C6", "C17", "C18")),
-    Documento("Declaración jurada", "DECLARACION JURADA", ("C5", "C6", "C7", "C8", "C14", "D30"), "Comprobar que todas las declaraciones sean verdaderas"),
+    Documento("Declaración jurada", "DECLARACION JURADA", ("C5", "C6", "C7", "C8", "C10", "C12", "C14", "C19", "D30"), "Validar expresamente que NO existieron trabajadores dependientes en la obra y período declarados"),
 )
 HOJAS = {d.hoja: d for d in DOCUMENTOS}
 
