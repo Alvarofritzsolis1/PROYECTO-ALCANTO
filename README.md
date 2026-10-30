@@ -1,14 +1,24 @@
-# PROYECTO ALCANTO — Plataforma Streamlit 100% online
+# PROYECTO ALCANTO — Gestión de contratistas 100% online
 
-**Aplicación web sin contraseña.** Se abre directamente desde Streamlit Cloud y no requiere Excel, Windows ni registro de acceso para usar la interfaz. El usuario **no sube ningún XLSX**: solo completa los formularios de empresa y trabajador. El modelo original se instala una sola vez en el servidor, y la generación de PDF usa una copia temporal del libro, conservando sus fórmulas; el cálculo depende de Aspose.Cells Cloud.
+**Ya se pueden generar y descargar PDFs directamente desde Streamlit**, sin instalar Excel, sin subir archivos y sin configurar Aspose. Para un documento se descarga un **PDF**; para varios, un ZIP de PDFs. El generador usa ReportLab y sólo trabaja con los datos de los formularios.
 
-**Importante sobre privacidad:** al eliminar la contraseña, los registros de empresas y trabajadores quedan aislados en la sesión temporal de cada visitante. La plantilla maestra se lee únicamente desde el servidor; no se recuperan registros de un almacenamiento común, aunque existan credenciales S3; tampoco se almacenan historiales permanentes. Al cerrar o perder la sesión puede ser necesario ingresar nuevamente la información. Esta decisión evita que terceros accedan a datos personales de otros usuarios.
+**Flujo básico:** registrar empresa → elegir una de las tres obras → registrar trabajador (solo si el documento lo requiere) → elegir documento → confirmar revisión → **Generar PDF online para imprimir** → **Descargar PDF**.
 
-**[Web sin subir Excel](docs/09_DESPLIEGUE_SIN_SUBIR_EXCEL.md)** · **[Ver cómo desplegar en Streamlit Community Cloud](docs/07_STREAMLIT_CLOUD.md)** · [Modo sin contraseña: privacidad y límites](docs/08_MODO_SIN_CONTRASENA.md) · [Entrar a Streamlit](https://share.streamlit.io/)
+**Autocompletado:** el trabajador hereda la obra seleccionada en la empresa y su dirección se obtiene del catálogo original. Renta sugerida, jornada y cargos predefinidos se pueden ajustar.
 
-**Estado de verificación:** revisión del archivo real con **17 hojas y 310 fórmulas**, seis pruebas estructurales aprobadas. **Aún pendiente**: conectar credenciales de Aspose y almacenamiento privado, desplegar en la cuenta Streamlit del usuario y validar los PDFs de las diez hojas. No se garantiza equivalencia visual hasta realizar estas comprobaciones.
+**Dos modos de exportación:**
+- **PDF web inmediato** (opción predeterminada): no depende de Excel ni Aspose, produce un diseño web imprimible para los 10 tipos documentales.
+- **PDF desde el Excel original** (opcional): requiere instalar una plantilla privada y credenciales Aspose en el servidor. Mantiene las fórmulas y pretende reproducir la impresión original, pero su fidelidad aún no ha sido validada.
 
-**Importante:** el código publicado es público, pero el Excel con RUT y nombres **no se ha subido a GitHub**. La versión Windows se conserva en `legacy/app_windows.py` y el prototipo Next.js en `web/`; ninguno es el punto de entrada del despliegue Streamlit.
+**Límite esencial:** los PDF web **no son idénticos en formato ni en contenido técnico completo a las salidas Excel**; son documentos resumidos que requieren revisión laboral y preventiva antes de firmar. Los 23 PTS pendientes no se habilitan como si estuvieran completos. El XLSX maestro y todas sus fórmulas permanecen intactos.
+
+**Privacidad:** sin contraseña cada visitante utiliza una sesión temporal aislada; no existe historial compartido ni persistente. Los datos reales de trabajadores nunca se suben al repositorio público.
+
+**[Guía para usar PDF web](docs/12_PDF_WEB_SIN_ASPOSE.md)** · **[Desplegar con Streamlit Cloud](docs/07_STREAMLIT_CLOUD.md)** · **[Auditoría 150 casos](docs/11_AUDITORIA_150_PRUEBAS.md)** · [Abrir Streamlit](https://share.streamlit.io/)
+
+**Pruebas:** GitHub Actions ejecuta 150 pruebas documentales más pruebas que generan y abren los 10 PDF con datos ficticios y un recorrido completo de formulario en Streamlit.
+
+**Importante:** el Excel con información personal no está publicado. La versión Windows se conserva en `legacy/app_windows.py` y el prototipo Next.js en `web/`; la aplicación activa se despliega desde `app.py`.
 
 ---
 
