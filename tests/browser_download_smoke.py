@@ -13,7 +13,7 @@ import re
 from playwright.sync_api import sync_playwright, expect
 from pypdf import PdfReader
 
-VERSION = "2026.10.30-pdf-browser-v2"
+VERSION = "2026.10.30-xlsx-original-v3"
 
 
 def inspeccionar(pdf: bytes, empresa: str, obra: str) -> None:
