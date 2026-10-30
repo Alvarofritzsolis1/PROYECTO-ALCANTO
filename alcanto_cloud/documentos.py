@@ -5,7 +5,7 @@ datos de la empresa y del trabajador sobre una copia para un documento.
 """
 from __future__ import annotations
 
-from .catalog import CAMPOS, DOCUMENTOS
+from .catalog import CAMPOS, DOCUMENTOS, CARGOS_PREDEFINIDOS
 
 HOJAS_EMPRESA = frozenset({
     "INDUCCION PREVENCION", "PTS.", "DECLARACION JURADA",
@@ -55,6 +55,8 @@ def documento_estado(
         estado = "Requiere trabajador"
     elif faltantes:
         estado = "Faltan datos"
+    elif hoja in {"Contrato Imprimible", "IRL"} and datos.get("C29", "").upper() not in CARGOS_PREDEFINIDOS:
+        estado = "Cargo sin matriz"
     elif hoja == "PTS." and datos.get("C29", "").casefold() not in pts_completos:
         estado = "PTS pendiente"
     elif hoja == "DECLARACION JURADA" and not confirma_jurada:
