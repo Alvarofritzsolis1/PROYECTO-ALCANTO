@@ -302,11 +302,14 @@ def descargar_documentos(
                 st.write("Confirma que la declaración de inexistencia de dependientes es verdadera.")
             st.caption(e["observacion"])
     nombres = {e["hoja"]: e["documento"] for e in disponibles}
-    seleccion = st.multiselect(
-        "Documentos para PDF", options=list(nombres),
-        format_func=lambda h: nombres[h],
-        key="docs_seleccionados_" + empresa["id"] + "_" + (trabajador["id"] if trabajador else "empresa") + "_" + cargo_pts,
-    )
+    st.markdown("**Marca los documentos que deseas descargar en PDF**")
+    scope = empresa["id"] + "_" + (trabajador["id"] if trabajador else "empresa") + "_" + cargo_pts
+    columnas_doc = st.columns(2)
+    seleccion = []
+    for indice, hoja_doc in enumerate(nombres):
+        with columnas_doc[indice % 2]:
+            if st.checkbox(nombres[hoja_doc], key="doc_" + scope + "_" + hoja_doc):
+                seleccion.append(hoja_doc)
     cloud_id, cloud_key = secret("ASPOSE_CLIENT_ID"), secret("ASPOSE_CLIENT_SECRET")
     aspose_disponible = bool(template and cloud_id and cloud_key)
     opciones_motor = ["PDF web inmediato · no requiere Excel ni claves"]
