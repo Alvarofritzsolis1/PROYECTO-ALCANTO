@@ -24,6 +24,9 @@ from alcanto_cloud.catalog import (
 from alcanto_cloud.documentos import estado_por_contexto, preparar_datos
 from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf, validar_pdf
 from alcanto_cloud.pdf_web import generar_pdf_web, ErrorPDFWeb
+from alcanto_cloud.pdf_excel_local import (
+    exportar_pdf_excel, motor_excel_disponible, ErrorExcelLocal,
+)
 from alcanto_cloud.storage import AlmacenPrivado
 from alcanto_cloud.workbook import (
     PlantillaInvalida, catalogos, generar_copia, verificar_plantilla, _abrir, _shared_strings, _leer_celdas,
@@ -312,24 +315,42 @@ def descargar_documentos(
                 seleccion.append(hoja_doc)
     cloud_id, cloud_key = secret("ASPOSE_CLIENT_ID"), secret("ASPOSE_CLIENT_SECRET")
     aspose_disponible = bool(template and cloud_id and cloud_key)
-    opciones_motor = ["PDF web inmediato · no requiere Excel ni claves"]
+    local_disponible = bool(template and motor_excel_disponible())
+    opciones_motor = []
+    if local_disponible:
+        opciones_motor.append("PDF desde el Excel original · motor Linux local")
+    opciones_motor.append("PDF web inmediato · borrador resumido")
     if aspose_disponible:
         opciones_motor.append("PDF desde Excel original · Aspose Cloud")
-    motor_elegido = st.radio("Tipo de PDF", opciones_motor, horizontal=True,
-                             key="motor_pdf_documentacion")
-    usar_aspose = motor_elegido.startswith("PDF desde Excel")
-    consentimiento = (
-        "Autorizo enviar una copia con los datos ingresados a Aspose.Cells Cloud y "
-        "revisaré cuidadosamente el documento antes de su utilización."
-        if usar_aspose else
-        "Entiendo que el PDF web es un BORRADOR que no reproduce íntegramente el Excel; "
-        "revisaré cláusulas, contenidos preventivos y datos antes de utilizarlo."
+    motor_elegido = st.radio(
+        "Tipo de PDF", opciones_motor, horizontal=True, key="motor_pdf_documentacion",
     )
-    avisar = st.checkbox(consentimiento, key="confirmacion_aspose")
-    if not aspose_disponible:
-        st.info("La descarga PDF web ya está disponible sin instalar el Excel interno ni configurar Aspose. "
-                "Reproduce el contenido principal en un diseño web imprimible; no es idéntica "
-                "al formato original de Excel. Revisa cláusulas, riesgos y firmas antes de su uso.")
+    usar_aspose = motor_elegido.startswith("PDF desde Excel original · Aspose")
+    usar_local = motor_elegido.startswith("PDF desde el Excel original")
+    if usar_aspose:
+        consentimiento = (
+            "Autorizo enviar la copia temporal con los datos ingresados a Aspose Cloud. "
+            "Revisaré cada documento antes de utilizarlo."
+        )
+    elif usar_local:
+        consentimiento = (
+            "Entiendo que el PDF se genera a partir de las hojas del Excel original "
+            "sin enviarlo a terceros. Revisaré el documento y sus fórmulas antes de firmarlo."
+        )
+    else:
+        consentimiento = (
+            "Entiendo que el PDF web es un BORRADOR que no reproduce íntegramente el Excel; "
+            "revisaré cláusulas, contenidos preventivos y datos antes de utilizarlo."
+        )
+    avisar = st.checkbox(consentimiento, key="confirmacion_pdf")
+    if local_disponible:
+        st.success("Plantilla privada y motor de impresión XLSX detectados. Se usará el diseño original.")
+    else:
+        st.info(
+            "El PDF web funciona como borrador. Para emitir los documentos completos "
+            "del XLSX original, el administrador debe instalar una sola vez la plantilla "
+            "maestra en el almacenamiento privado del servidor y LibreOffice/UNO."
+        )
     apto = bool(seleccion and avisar)
     contexto = empresa["id"] + "|" + (trabajador["id"] if trabajador else "empresa") + "|" + cargo_pts
     firma = sha256((contexto + "|" + motor_elegido + "|" + str(confirma_jurada) + "|" + "|".join(seleccion)).encode()).hexdigest()
@@ -360,7 +381,11 @@ def descargar_documentos(
                     )
                     if not vigente["generable"]:
                         raise ValueError("La información de " + hoja + " está incompleta o pendiente.")
-                    if usar_aspose:
+                    if usar_local:
+                        if not template:
+                            raise ErrorExcelLocal("Plantilla maestra privada no instalada.")
+                        resultado = exportar_pdf_excel(template, hoja, datos)
+                    elif usar_aspose:
                         if not template or not motor:
                             raise ErrorDeConversion("Motor de Excel sin configurar.")
                         copia = generar_copia(template, datos)
@@ -389,14 +414,14 @@ def descargar_documentos(
             st.session_state["pdf_generados"] = bolsa.getvalue()
             st.session_state["pdf_firma"] = firma
             st.success(f"Se generaron {len(seleccion)} documentos ({total_paginas} páginas). Revisa antes de imprimir.")
-        except (ErrorDeConversion, PlantillaInvalida, ErrorPDFWeb, ValueError) as error:
+        except (ErrorDeConversion, ErrorExcelLocal, PlantillaInvalida, ErrorPDFWeb, ValueError) as error:
             st.session_state.pop("pdf_generados", None)
             st.error(str(error))
         except Exception as error:
             st.session_state.pop("pdf_generados", None)
             st.error(
                 "Falló la generación del documento en el motor "
-                + ("Aspose" if usar_aspose else "PDF web")
+                + ("Aspose" if usar_aspose else ("Excel original local" if usar_local else "PDF web"))
                 + " (" + type(error).__name__ + "). "
                 "El archivo no se preparó para descarga. "
                 "Indica esta clase de error y la versión " + RELEASE_TAG + " al soporte."
