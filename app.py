@@ -21,6 +21,7 @@ from alcanto_cloud.catalog import (
     catalogo_predefinido, RENTA_BASE_REFERENCIA, JORNADA_REFERENCIA,
     PAGO_REFERENCIA,
 )
+from alcanto_cloud.documentos import estado_por_contexto, preparar_datos
 from alcanto_cloud.pdf_service import AsposeCellsCloud, ErrorDeConversion, verificar_identidad_pdf
 from alcanto_cloud.storage import AlmacenPrivado
 from alcanto_cloud.workbook import (
@@ -140,6 +141,18 @@ def formulario_empresa() -> list[dict]:
             for i, (ref,titulo) in enumerate(CAMPOS_EMPRESA.items()):
                 with cols[i%2]:
                     valores[ref] = st.text_input(f"{titulo} · {ref}",max_chars=800,key="emp_"+ref)
+            st.markdown("#### Opciones de documentación de empresa")
+            valores["D30"] = st.selectbox(
+                "Obra / faena principal · D30",
+                options=[""] + catalogo_predefinido()["obras"],
+                key="emp_obra",
+                help="Se conserva la selección para la fórmula de dirección C30 del Excel.",
+            )
+            valores["DECLARANTE_NACIONALIDAD"] = st.text_input(
+                "Nacionalidad del representante firmante (solo declaración jurada)",
+                max_chars=80, key="emp_nacionalidad",
+                help="Es distinta de la nacionalidad del trabajador: el Excel usa C19 en la declaración jurada.",
+            )
             enviado = st.form_submit_button("Guardar empresa",type="primary")
         if enviado:
             if not valores["C5"].strip() or not valores["C6"].strip():
@@ -240,8 +253,10 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
         )
         creado=st.form_submit_button("Registrar trabajador",type="primary")
     if creado:
-        if not all(valores.get(x, "").strip() for x in ("C17","C18","C29","D30")):
-            st.error("Completa nombre, RUT, cargo y obra del trabajador.")
+        if not all(valores.get(x, "").strip() for x in ("C17","C18","C29")) or not (
+            valores.get("D30", "").strip() or elegida.get("valores", {}).get("D30", "").strip()
+        ):
+            st.error("Completa nombre, RUT, cargo y una obra (del trabajador o de la empresa).")
         else:
             try:
                 guardar("trabajadores",{"empresa_id":id_empresa,"valores":{k:v.strip() for k,v in valores.items()}})
@@ -252,69 +267,111 @@ def formulario_trabajador(empresas: list[dict], cat: dict) -> tuple[dict | None,
     return elegida,None
 
 
-def descargar_documentos(template: bytes | None, empresa:dict, trabajador:dict, cat:dict) -> None:
-    st.markdown("### 3. Documentos disponibles y PDF")
-    datos={**empresa.get("valores",{}),**trabajador.get("valores",{})}
-    estados=estado_documental(datos, cat["pts_completos"])
-    hechos=sum(1 for e in estados if e["estado"]=="Datos completos / revisar")
-    c1,c2,c3=st.columns(3)
-    c1.metric("Documentos con datos mínimos",hechos)
-    c2.metric("Por completar",len(estados)-hechos)
-    c3.metric("Total de documentos",len(estados))
-    for item in estados:
-        nombre=item["documento"]
-        estado=item["estado"]
-        texto=", ".join(item["faltan"])
-        with st.expander(("✅ " if estado.startswith("Datos completos") else "⚠️ ")+nombre+" — "+estado):
-            if texto: st.write("Campos necesarios: "+texto)
-            else: st.write("Datos de identificación completos; sigue pendiente revisar legalidad, firmas y contenido.")
-            st.caption(item["observacion"])
-    disponibles=[e for e in estados if e["estado"]=="Datos completos / revisar"]
-    nombres={e["hoja"]: e["documento"] for e in disponibles}
-    seleccion=st.multiselect("Selecciona los documentos que deseas convertir a PDF",
-        list(nombres),format_func=lambda k:nombres[k])
-    avisar=st.checkbox("Confirmo que los datos son correctos, que conozco que el archivo se enviará por HTTPS a Aspose.Cells Cloud y revisaré los PDF antes de su uso.")
-    cloud_id=secret("ASPOSE_CLIENT_ID")
-    cloud_key=secret("ASPOSE_CLIENT_SECRET")
+def descargar_documentos(
+    template: bytes | None, empresa: dict, trabajador: dict | None, cat: dict,
+    *, cargo_pts: str = "", confirma_jurada: bool = False,
+) -> None:
+    """Elige documentos con empresa sola; trabajador solo cuando corresponda."""
+    st.markdown("### Documentación que puedes generar")
+    empresa_datos = empresa.get("valores", {})
+    trabajador_datos = trabajador.get("valores", {}) if trabajador else None
+    estados = estado_por_contexto(
+        empresa_datos, trabajador_datos, cat["pts_completos"],
+        cargo_pts=cargo_pts, confirma_jurada=confirma_jurada,
+    )
+    disponibles = [e for e in estados if e["generable"]]
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Documentos con datos mínimos", len(disponibles))
+    c2.metric("Pendientes / requieren revisión", len(estados) - len(disponibles))
+    c3.metric("Documentos del sistema", len(estados))
+    for e in estados:
+        icono = "✅ " if e["generable"] else "⚠️ "
+        with st.expander(icono + e["documento"] + " — " + e["estado"]):
+            if e["faltan"]:
+                st.write("Faltan campos: " + ", ".join(e["faltan"]))
+            if e["estado"] == "Requiere trabajador":
+                st.write("Este documento identifica a un trabajador. Selecciona uno para generarlo.")
+            if e["estado"] == "PTS pendiente":
+                st.write("El cargo todavía no tiene sus 17 campos técnicos PTS completos.")
+            if e["estado"] == "Confirmar declaración":
+                st.write("Confirma que la declaración de inexistencia de dependientes es verdadera.")
+            st.caption(e["observacion"])
+    nombres = {e["hoja"]: e["documento"] for e in disponibles}
+    seleccion = st.multiselect(
+        "Documentos para PDF", options=list(nombres),
+        format_func=lambda h: nombres[h], key="docs_seleccionados",
+    )
+    avisar = st.checkbox(
+        "Confirmo que revisaré los datos y que autorizo el envío de la copia temporal por HTTPS "
+        "a Aspose.Cells Cloud para su conversión.",
+        key="confirmacion_aspose",
+    )
+    cloud_id, cloud_key = secret("ASPOSE_CLIENT_ID"), secret("ASPOSE_CLIENT_SECRET")
     if not template:
-        st.warning("El Excel interno todavía no está instalado en el servidor. No tienes que subir ningún archivo.")
+        st.warning("Falta instalar el modelo privado del Excel en el servidor. Los formularios funcionan, pero todavía no se pueden imprimir PDFs.")
     if not cloud_id or not cloud_key:
-        st.warning("Falta conectar Aspose.Cells Cloud en los secretos de Streamlit. Los PDFs online no se pueden generar todavía.")
-    if st.button("Generar PDF online para imprimir", type="primary",disabled=not (template and seleccion and avisar and cloud_id and cloud_key)):
+        st.warning("Falta configurar Aspose.Cells Cloud en Streamlit Secrets. Hasta entonces los PDF siguen deshabilitados.")
+    apto = bool(template and cloud_id and cloud_key and seleccion and avisar)
+    contexto = empresa["id"] + "|" + (trabajador["id"] if trabajador else "empresa") + "|" + cargo_pts
+    firma = sha256((contexto + "|" + "|".join(seleccion)).encode()).hexdigest()
+    if st.button("Generar PDF online para imprimir", type="primary", disabled=not apto):
         try:
-            with st.spinner("Preparando copia temporal del Excel sin modificar ninguna fórmula…"):
-                copia=generar_copia(template,datos)
-                motor=AsposeCellsCloud(cloud_id,cloud_key)
-                with _abrir(template) as z:
-                    nombre_anterior = _leer_celdas(z, "xl/worksheets/sheet1.xml", ["C17"], _shared_strings(z))["C17"]
-            zipdata=BytesIO()
-            total_paginas=0
-            with ZipFile(zipdata, "w", ZIP_DEFLATED) as paquete:
-                progreso=st.progress(0.0)
-                for i,hoja in enumerate(seleccion,1):
-                    resultado=motor.convertir_hoja(copia,hoja)
-                    verificar_identidad_pdf(resultado,hoja,datos.get("C17",""),
-                                             datos.get("C18",""),nombre_anterior)
-                    safe=hoja.replace(" ","_").replace(".","")
-                    paquete.writestr(f"{i:02d}_{safe}.pdf",resultado.contenido)
-                    total_paginas+=resultado.paginas
-                    progreso.progress(i/len(seleccion))
-                paquete.writestr("IMPORTANTE.txt",
-                    "ALCANTO: PDFs pendientes de revisión de datos, firmas y cumplimiento legal.\n"
-                    "El documento original XLSX y sus fórmulas no fueron modificados.\n")
-            st.session_state["pdf_generados"] = zipdata.getvalue()
-            st.session_state["pdf_firma"] = sha256((trabajador["id"]+"|"+"|".join(seleccion)).encode()).hexdigest()
-            st.success(f"Conversión finalizada: {len(seleccion)} documentos, {total_paginas} páginas. Confirma el resultado antes de imprimir.")
+            motor = AsposeCellsCloud(cloud_id, cloud_key)
+            bolsa = BytesIO()
+            total_paginas = 0
+            with _abrir(template) as z:
+                nombre_previo = _leer_celdas(
+                    z, "xl/worksheets/sheet1.xml", ["C17"], _shared_strings(z)
+                )["C17"]
+            with ZipFile(bolsa, "w", ZIP_DEFLATED) as paquete:
+                progreso = st.progress(0.0)
+                for indice, hoja in enumerate(seleccion, 1):
+                    datos = preparar_datos(
+                        empresa_datos, trabajador_datos,
+                        hoja=hoja, cargo_pts=cargo_pts,
+                    )
+                    # Comprobación de servidor; nunca confiar únicamente en el desplegable.
+                    vigente = next(
+                        e for e in estado_por_contexto(
+                            empresa_datos, trabajador_datos, cat["pts_completos"],
+                            cargo_pts=cargo_pts, confirma_jurada=confirma_jurada
+                        ) if e["hoja"] == hoja
+                    )
+                    if not vigente["generable"]:
+                        raise ValueError("La información de " + hoja + " está incompleta o pendiente.")
+                    copia = generar_copia(template, datos)
+                    resultado = motor.convertir_hoja(copia, hoja)
+                    verificar_identidad_pdf(
+                        resultado, hoja,
+                        (trabajador_datos or {}).get("C17", ""),
+                        (trabajador_datos or {}).get("C18", ""),
+                        nombre_previo,
+                    )
+                    archivo_pdf = hoja.replace(" ", "_").replace(".", "")
+                    paquete.writestr(f"{indice:02d}_{archivo_pdf}.pdf", resultado.contenido)
+                    total_paginas += resultado.paginas
+                    progreso.progress(indice / len(seleccion))
+                paquete.writestr(
+                    "IMPORTANTE.txt",
+                    "ALCANTO: documentos pendientes de revisión de contenido legal, preventivo y firmas.\n"
+                    "El XLSX maestro y sus fórmulas originales no se modificaron.\n",
+                )
+            st.session_state["pdf_generados"] = bolsa.getvalue()
+            st.session_state["pdf_firma"] = firma
+            st.success(f"Se generaron {len(seleccion)} documentos ({total_paginas} páginas). Revisa antes de imprimir.")
         except (ErrorDeConversion, PlantillaInvalida, ValueError) as error:
-            st.session_state.pop("pdf_generados",None)
+            st.session_state.pop("pdf_generados", None)
             st.error(str(error))
         except Exception:
-            st.session_state.pop("pdf_generados",None)
-            st.error("La conversión no pudo completarse. Revisa las credenciales, cuotas y funcionamiento del proveedor.")
-    firma=sha256((trabajador["id"]+"|"+"|".join(seleccion)).encode()).hexdigest()
-    if st.session_state.get("pdf_firma")==firma and st.session_state.get("pdf_generados"):
-        st.download_button("⬇ Descargar documentos PDF para imprimir",data=st.session_state["pdf_generados"],
-            file_name="ALCANTO_documentos_imprimibles.zip",mime="application/zip",type="primary")
+            st.session_state.pop("pdf_generados", None)
+            st.error("El proveedor de conversión no pudo generar todos los documentos; revisa sus credenciales y cuota.")
+    if st.session_state.get("pdf_firma") == firma and st.session_state.get("pdf_generados"):
+        st.download_button(
+            "⬇ Descargar documentos PDF para imprimir",
+            data=st.session_state["pdf_generados"],
+            file_name="ALCANTO_documentos_imprimibles.zip",
+            mime="application/zip", type="primary",
+        )
 
 
 def main() -> None:
@@ -352,20 +409,52 @@ def main() -> None:
         empresas=formulario_empresa()
         empresa,trabajador=formulario_trabajador(empresas,catalogo)
     with tab2:
-        empresas=listar("empresas")
-        todos=listar("trabajadores")
-        if not empresas or not todos:
-            st.info("Guarda una empresa y un trabajador en la primera pestaña.")
+        empresas = listar("empresas")
+        if not empresas:
+            st.info("Registra una empresa para ver su documentación. No necesitas registrar trabajadores para los documentos de empresa.")
         else:
-            mapa={t["id"]:t for t in todos}
-            elegido=st.selectbox("Trabajador",options=list(mapa),format_func=lambda k:mapa[k].get("valores",{}).get("C17","Trabajador"))
-            worker=mapa[elegido]
-            company=next((e for e in empresas if e["id"]==worker.get("empresa_id")),None)
-            if company:
-                st.caption("Empresa: "+company.get("valores",{}).get("C5",""))
-                descargar_documentos(template,company,worker,catalogo)
+            empresa_id = st.selectbox(
+                "Empresa para documentos",
+                options=[e["id"] for e in empresas],
+                format_func=lambda key: next(
+                    e["valores"].get("C5", "Empresa") for e in empresas if e["id"] == key
+                ),
+            )
+            company = next(e for e in empresas if e["id"] == empresa_id)
+            personas = [
+                t for t in listar("trabajadores") if t.get("empresa_id") == empresa_id
+            ]
+            persona_id = st.selectbox(
+                "Tipo de documentación",
+                options=[""] + [t["id"] for t in personas],
+                format_func=lambda key: "Solo documentos de empresa" if not key else next(
+                    t.get("valores", {}).get("C17", "Trabajador")
+                    for t in personas if t["id"] == key
+                ),
+            )
+            worker = next((t for t in personas if t["id"] == persona_id), None)
+            if worker:
+                st.caption("Se reutilizan automáticamente los antecedentes de esta empresa.")
+                cargo_pts = worker.get("valores", {}).get("C29", "")
             else:
-                st.error("No se encontró la empresa vinculada a este trabajador.")
+                st.info("Puedes generar documentación de empresa sin trabajador. Selecciona un cargo únicamente si necesitas un PTS corporativo.")
+                cargo_pts = st.selectbox(
+                    "Cargo para PTS de empresa",
+                    options=[""] + catalogo["cargos"],
+                    key="cargo_pts_empresa",
+                )
+            if not company.get("valores", {}).get("D30"):
+                st.warning("La empresa no tiene obra registrada. Los documentos que la necesiten seguirán pendientes.")
+            confirma_jurada = st.checkbox(
+                "Confirmo, bajo mi responsabilidad, que en el período y obra declarados "
+                "la empresa NO tuvo trabajadores dependientes; esta declaración es verdadera.",
+                value=False,
+                key="confirma_jurada_empresa",
+            )
+            descargar_documentos(
+                template, company, worker, catalogo,
+                cargo_pts=cargo_pts, confirma_jurada=confirma_jurada,
+            )
     st.caption("Alcanto online · Contratos, IRL, PTS y registros. Es obligatorio revisar los PDF antes de imprimir, firmar o entregar.")
 
 
