@@ -34,7 +34,7 @@ def preparar_datos(
         datos.update({k: str(v).strip() for k, v in trabajador.items()
                       if (k in CAMPOS or k == "ANEXO_M4") and isinstance(v, str) and str(v).strip()})
     if hoja == "PTS.":
-        datos["C29"] = cargo_pts.strip()
+        datos["C29"] = cargo_pts.strip() or (trabajador or {}).get("C29", "").strip()
     if hoja == "DECLARACION JURADA":
         # C19 es una referencia existente del Excel; en este documento
         # se refiere al representante firmante, NUNCA al trabajador.
