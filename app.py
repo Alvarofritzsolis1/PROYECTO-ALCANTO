@@ -342,7 +342,7 @@ def descargar_documentos(
             "Entiendo que el PDF web es un BORRADOR que no reproduce íntegramente el Excel; "
             "revisaré cláusulas, contenidos preventivos y datos antes de utilizarlo."
         )
-    avisar = st.checkbox(consentimiento, key="confirmacion_pdf")
+    avisar = st.checkbox(consentimiento, key="confirmacion_aspose")
     if local_disponible:
         st.success("Plantilla privada y motor de impresión XLSX detectados. Se usará el diseño original.")
     else:
