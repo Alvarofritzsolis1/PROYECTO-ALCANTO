@@ -150,15 +150,13 @@ def exportar_pdf_excel(template: bytes, hoja: str, datos: dict[str, str], *,
         "hoja": hoja, "entradas": entradas,
         "renta_letras": palabras, "ANEXO_M4": vencimiento,
     }
-    antiguo = ""
-    if hoja in {
-        "Contrato Imprimible", "Anexo Traslado", "Anexo extension contrato",
-        "IRL", "ENTREGA PTS", "Registros Entrega EPP", "REGLAMENTO INTERNO",
-    }:
-        with _abrir(template) as z:
-            antiguo = _leer_celdas(
-                z, "xl/worksheets/sheet1.xml", ["C17"], _shared_strings(z),
-            )["C17"]
+    nombre_anterior_empresa, antiguo = "", ""
+    with _abrir(template) as z:
+        anteriores = _leer_celdas(
+            z, "xl/worksheets/sheet1.xml", ["C5", "C17"], _shared_strings(z),
+        )
+        nombre_anterior_empresa = anteriores["C5"]
+        antiguo = anteriores["C17"]
     worker = Path(__file__).resolve().parents[1] / "scripts" / "uno_sheet_export.py"
     if not worker.is_file():
         raise ErrorExcelLocal("Falta el script de impresión UNO")
@@ -189,6 +187,14 @@ def exportar_pdf_excel(template: bytes, hoja: str, datos: dict[str, str], *,
         esperado = "$" + f"{int(renta):,}".replace(",", ".")
         if esperado not in texto or palabras.lower().rstrip(".") not in texto.lower():
             raise ErrorExcelLocal("Sueldo y sueldo en letras no coinciden. PDF bloqueado.")
+    nombre_empresa = entradas.get("C5", "")
+    if nombre_anterior_empresa and nombre_empresa and (
+        nombre_anterior_empresa.casefold() != nombre_empresa.casefold()
+    ):
+        normalizado = re.sub(r"\s+", " ", texto.casefold())
+        previo_normalizado = re.sub(r"\s+", " ", nombre_anterior_empresa.casefold())
+        if previo_normalizado in normalizado:
+            raise ErrorExcelLocal("Documento contiene datos de la empresa anterior. PDF bloqueado.")
     if antiguo or entradas.get("C17"):
         verificar_identidad_pdf(
             resultado, hoja, entradas["C17"], entradas["C18"], antiguo,
