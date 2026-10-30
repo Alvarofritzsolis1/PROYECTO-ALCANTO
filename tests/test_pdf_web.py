@@ -72,7 +72,7 @@ class PdfPorDocumento(unittest.TestCase):
         texto = self.verificar_pdf(DOCUMENTOS[0])
         self.assertIn("$640.000", texto)
         self.assertIn("Lomas Verdes", texto)
-        self.assertIn(DIRECCIONES_OBRA["Lomas Verdes"], texto)
+        self.assertIn(" ".join(DIRECCIONES_OBRA["Lomas Verdes"].split()), " ".join(texto.split()))
         self.assertIn("30 de noviembre de 2026", texto)
 
     def test_empresa_sola_genera_tres_documentos(self):
