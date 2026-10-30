@@ -299,7 +299,8 @@ def descargar_documentos(
     nombres = {e["hoja"]: e["documento"] for e in disponibles}
     seleccion = st.multiselect(
         "Documentos para PDF", options=list(nombres),
-        format_func=lambda h: nombres[h], key="docs_seleccionados",
+        format_func=lambda h: nombres[h],
+        key="docs_seleccionados_" + empresa["id"] + "_" + (trabajador["id"] if trabajador else "empresa") + "_" + cargo_pts,
     )
     avisar = st.checkbox(
         "Confirmo que revisaré los datos y que autorizo el envío de la copia temporal por HTTPS "
@@ -449,7 +450,7 @@ def main() -> None:
                 "Confirmo, bajo mi responsabilidad, que en el período y obra declarados "
                 "la empresa NO tuvo trabajadores dependientes; esta declaración es verdadera.",
                 value=False,
-                key="confirma_jurada_empresa",
+                key=f"confirma_jurada_empresa_{empresa_id}",
             )
             descargar_documentos(
                 template, company, worker, catalogo,
