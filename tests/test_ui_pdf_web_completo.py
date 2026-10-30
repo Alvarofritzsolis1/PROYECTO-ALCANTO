@@ -24,9 +24,9 @@ class PlataformaImpresionSinClaves(unittest.TestCase):
         app.selectbox(key="emp_obra").set_value("Lomas Verdes")
         app.form_submit_button[0].click().run()
         self.assertFalse(app.exception, str(app.exception))
-        options = [w for w in app.multiselect if w.label == "Documentos para PDF"]
-        self.assertEqual(len(options), 1)
-        options[0].set_value(["INDUCCION PREVENCION"]).run()
+        opciones = [w for w in app.checkbox if w.label == "Inducción de prevención"]
+        self.assertEqual(len(opciones), 1)
+        opciones[0].check().run()
         app.checkbox(key="confirmacion_aspose").check().run()
         botones = [w for w in app.button if w.label == "Generar PDF online para imprimir"]
         self.assertEqual(len(botones), 1)
