@@ -30,6 +30,7 @@ from alcanto_cloud.workbook import (
 )
 
 st.set_page_config(page_title="PROYECTO ALCANTO | Gestión documental", page_icon="📄", layout="wide")
+RELEASE_TAG = "2026.10.30-pdf-browser-v2"
 
 # No mostrar valores reales en avisos ni en registros de aplicación.
 def secret(nombre: str) -> str:
@@ -306,11 +307,6 @@ def descargar_documentos(
         format_func=lambda h: nombres[h],
         key="docs_seleccionados_" + empresa["id"] + "_" + (trabajador["id"] if trabajador else "empresa") + "_" + cargo_pts,
     )
-    avisar = st.checkbox(
-        "Confirmo que revisaré los datos y que autorizo el envío de la copia temporal por HTTPS "
-        "a Aspose.Cells Cloud para su conversión.",
-        key="confirmacion_aspose",
-    )
     cloud_id, cloud_key = secret("ASPOSE_CLIENT_ID"), secret("ASPOSE_CLIENT_SECRET")
     aspose_disponible = bool(template and cloud_id and cloud_key)
     opciones_motor = ["PDF web inmediato · no requiere Excel ni claves"]
@@ -319,6 +315,14 @@ def descargar_documentos(
     motor_elegido = st.radio("Tipo de PDF", opciones_motor, horizontal=True,
                              key="motor_pdf_documentacion")
     usar_aspose = motor_elegido.startswith("PDF desde Excel")
+    consentimiento = (
+        "Autorizo enviar una copia con los datos ingresados a Aspose.Cells Cloud y "
+        "revisaré cuidadosamente el documento antes de su utilización."
+        if usar_aspose else
+        "Entiendo que el PDF web es un BORRADOR que no reproduce íntegramente el Excel; "
+        "revisaré cláusulas, contenidos preventivos y datos antes de utilizarlo."
+    )
+    avisar = st.checkbox(consentimiento, key="confirmacion_aspose")
     if not aspose_disponible:
         st.info("La descarga PDF web ya está disponible sin instalar el Excel interno ni configurar Aspose. "
                 "Reproduce el contenido principal en un diseño web imprimible; no es idéntica "
@@ -385,9 +389,15 @@ def descargar_documentos(
         except (ErrorDeConversion, PlantillaInvalida, ErrorPDFWeb, ValueError) as error:
             st.session_state.pop("pdf_generados", None)
             st.error(str(error))
-        except Exception:
+        except Exception as error:
             st.session_state.pop("pdf_generados", None)
-            st.error("El proveedor de conversión no pudo generar todos los documentos; revisa sus credenciales y cuota.")
+            st.error(
+                "Falló la generación del documento en el motor "
+                + ("Aspose" if usar_aspose else "PDF web")
+                + " (" + type(error).__name__ + "). "
+                "El archivo no se preparó para descarga. "
+                "Indica esta clase de error y la versión " + RELEASE_TAG + " al soporte."
+            )
     if st.session_state.get("pdf_firma") == firma and st.session_state.get("pdf_generados"):
         if len(seleccion) == 1:
             with ZipFile(BytesIO(st.session_state["pdf_generados"])) as paquete_zip:
@@ -396,13 +406,14 @@ def descargar_documentos(
             st.download_button(
                 "⬇ Descargar PDF listo para imprimir", data=pdf_unico,
                 file_name=archivo, mime="application/pdf", type="primary",
-                key="descarga_pdf_unico",
+                key="descarga_pdf_unico", on_click="ignore",
             )
         else:
             st.download_button(
                 "⬇ Descargar documentos PDF (ZIP)", data=st.session_state["pdf_generados"],
                 file_name="ALCANTO_documentos_imprimibles.zip",
                 mime="application/zip", type="primary", key="descarga_pdf_zip",
+                on_click="ignore",
             )
 
 
@@ -412,6 +423,7 @@ def main() -> None:
     with st.sidebar:
         st.markdown("## 📄 ALCANTO")
         st.caption("Gestiona el sistema sin instalar Excel")
+        st.caption("Versión: " + RELEASE_TAG)
         if st.checkbox("Confirmo que deseo borrar los datos de esta sesión"):
             if st.button("Borrar datos temporales"):
                 st.session_state.clear()
@@ -425,6 +437,31 @@ def main() -> None:
                    ("disponible" if secret("ASPOSE_CLIENT_ID") and secret("ASPOSE_CLIENT_SECRET")
                     else "opcional / no configurada"))
         st.caption("No guardar archivos con RUT en GitHub público.")
+        with st.expander("Diagnóstico de descarga PDF", expanded=False):
+            st.caption("PDF ficticio para probar el navegador, sin registrar datos ni usar Aspose.")
+            try:
+                prueba = {
+                    "C5": "EMPRESA FICTICIA ALCANTO",
+                    "C6": "76.000.000-0", "C7": "REPRESENTANTE DE PRUEBA",
+                    "C8": "10.000.000-0", "C14": "OBRAS DE PRUEBA",
+                    "D30": "Lomas Verdes",
+                }
+                pdf_prueba = generar_pdf_web("INDUCCION PREVENCION", prueba)
+                res_prueba = validar_pdf(pdf_prueba, "INDUCCION PREVENCION")
+                st.success("Motor de PDF web: " + str(res_prueba.paginas) +
+                           " página(s), " + str(len(pdf_prueba)) + " bytes generados.")
+                st.download_button(
+                    "Descargar PDF ficticio de diagnóstico",
+                    data=pdf_prueba,
+                    file_name="ALCANTO_DIAGNOSTICO.pdf",
+                    mime="application/pdf",
+                    on_click="ignore",
+                    key="diagnostico_pdf_web",
+                )
+                st.caption("Esta prueba verifica el motor en el servidor. "
+                           "Comprueba que el archivo aparezca en Descargas de tu navegador.")
+            except Exception as error:
+                st.error("Motor PDF no disponible: " + type(error).__name__)
     template=plantilla_actual()
     if not template:
         st.info("PDF web listo para generar y descargar. El modelo Excel original no está instalado: "
