@@ -54,6 +54,19 @@ Estas 15 pruebas se repiten para las diez hojas. GitHub también ejecuta pruebas
 - **Estado de confirmación y selección de PDF aislado por empresa/trabajador.**
 - No se eliminó ninguna hoja, fórmula ni contenido original.
 
+## Prueba de la interfaz Streamlit
+
+La suite `tests/test_ui_empresa_sin_trabajador.py` simula una sesión real de Streamlit:
+
+- Registrar empresa y obra con datos ficticios, sin trabajador.
+- Comprobar que existe la vista **«Solo documentos de empresa»**.
+- Seleccionar el PTS corporativo de **PINTOR**.
+- Confirmar expresamente las condiciones de la declaración jurada.
+- Comprobar que se habilitan las **tres hojas corporativas** cuando están todos los datos mínimos.
+- Confirmar que no existe un cargador de Excel visible para el usuario.
+
+**Resultado:** dos pruebas de interfaz aprobadas por GitHub Actions, además de los 150 casos documentales y las verificaciones previas. [Ver CI](../../actions).
+
 ## Comprobación estructural con el libro original
 
 Archivo original: 17 hojas, 310 fórmulas (inventario previo); SHA-256:
