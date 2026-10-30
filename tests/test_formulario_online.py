@@ -17,8 +17,11 @@ class FormularioOnline(unittest.TestCase):
         self.assertIn("def almacen_plantilla()", APP)
         self.assertIn("ALCANTO_MODELO.xlsx", APP)
 
-    def test_solo_exporta_si_motor_y_modelo_estan_listos(self):
-        self.assertIn("apto = bool(template and cloud_id and cloud_key and seleccion and avisar)", APP)
+    def test_pdf_web_sin_servicios_externos(self):
+        self.assertIn("apto = bool(seleccion and avisar)", APP)
+        self.assertIn("generar_pdf_web(", APP)
+        self.assertIn("Descargar PDF listo para imprimir", APP)
+        self.assertIn("PDF web inmediato", APP)
 
     def test_formularios_siguen_disponibles_sin_modelo(self):
         self.assertIn('catalogo = catalogo_predefinido()', APP)
