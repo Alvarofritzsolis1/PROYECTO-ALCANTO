@@ -1,0 +1,47 @@
+name: Validar descarga EN STREAMLIT PÚBLICO
+
+on:
+  workflow_dispatch:
+    inputs:
+      streamlit_url:
+        description: "URL exacta de ALCANTO (https://...streamlit.app)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  navegador-publico:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar herramientas de prueba
+        run: |
+          python -m pip install "playwright>=1.49,<2" pypdf
+          python -m playwright install --with-deps chromium
+      - name: Verificar dominio y versión con descarga real
+        env:
+          PUBLIC_URL: ${{ inputs.streamlit_url }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+          u=urlparse(os.environ["PUBLIC_URL"])
+          assert u.scheme=="https" and u.hostname and u.hostname.endswith(".streamlit.app"), "Requiere URL HTTPS Streamlit"
+          assert not u.username and not u.password, "URL inválida"
+          print("Dominio de Streamlit validado")
+          PY
+          python tests/browser_download_smoke.py --url "$PUBLIC_URL" --out /tmp/alcanto_production_test
+      - name: Guardar PDF y capturas de prueba con datos ficticios
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALCANTO-PUBLIC-STREAMLIT-PDF-TEST
+          path: /tmp/alcanto_production_test/
+          retention-days: 5
