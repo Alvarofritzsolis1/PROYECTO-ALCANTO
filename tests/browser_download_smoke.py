@@ -75,7 +75,7 @@ def prueba(url: str, destino: Path) -> None:
             obra_input.press("Enter")
             print("obra value:", obra_input.input_value(), flush=True)
             page.get_by_role("button", name="Guardar empresa", exact=True).click()
-            expect(page.get_by_text("EMPRESA DE EJEMPLO BROWSER SPA").first).to_be_visible(timeout=30000)
+            expect(page.get_by_role("combobox", name="Empresa de este trabajador")).to_have_value("EMPRESA DE EJEMPLO BROWSER SPA", timeout=30000)
             page.get_by_role("tab", name=re.compile("Documentación e impresión")).click()
             expect(page.get_by_text("Documentos para PDF")).to_be_visible()
             docs = page.get_by_test_id("stMultiSelect").filter(has_text="Documentos para PDF")
