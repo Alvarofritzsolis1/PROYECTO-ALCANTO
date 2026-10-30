@@ -138,9 +138,8 @@ class CasosDocumentales(unittest.TestCase):
             datos["C29"] = "CARGO NO EXISTENTE"
             res = documento_estado(hoja, datos, PTS_LISTOS,
                                    tiene_trabajador=True, confirma_jurada=True)
-            self.assertFalse(res["generable"] if hoja in
-                {"PTS.", "IRL", "Contrato Imprimible"} else False)
             if hoja in {"PTS.", "IRL", "Contrato Imprimible"}:
+                self.assertFalse(res["generable"])
                 self.assertIn(res["estado"], {"PTS pendiente", "Cargo sin matriz"})
             else:
                 self.assertTrue(res["generable"])
