@@ -67,11 +67,7 @@ def prueba(url: str, destino: Path) -> None:
             )
             expect(combo_obra).to_have_count(1)
             print("HTML stSelectbox:", combo_obra.evaluate("(el) => el.outerHTML.slice(0, 2400)"), flush=True)
-            triggers = combo_obra.locator('[role="combobox"], input, button')
-            if triggers.count():
-                triggers.first.click()
-            else:
-                combo_obra.click()
+            combo_obra.get_by_role("button", name="Open", exact=True).click()
             page.get_by_role("option", name="Lomas Verdes", exact=True).click()
             page.get_by_role("button", name="Guardar empresa", exact=True).click()
             expect(page.get_by_text("EMPRESA DE EJEMPLO BROWSER SPA").first).to_be_visible(timeout=30000)
@@ -80,11 +76,13 @@ def prueba(url: str, destino: Path) -> None:
             docs = page.get_by_test_id("stMultiSelect").filter(has_text="Documentos para PDF")
             expect(docs).to_have_count(1)
             print("HTML stMultiSelect:", docs.evaluate("(el) => el.outerHTML.slice(0, 2400)"), flush=True)
-            triggers = docs.locator('[role="combobox"], input, button')
-            if triggers.count():
-                triggers.first.click()
+            botones = docs.get_by_role("button", name="Open")
+            if botones.count():
+                botones.first.click()
             else:
-                docs.click()
+                docs.get_by_role("combobox").click()
+                docs.get_by_role("combobox").fill("Inducción")
+            print("Opciones disponibles:", page.get_by_role("option").all_text_contents(), flush=True)
             page.get_by_role("option", name="Inducción de prevención", exact=True).click()
             page.get_by_role("checkbox", name=re.compile("Entiendo que el PDF web es un BORRADOR")).check()
             boton = page.get_by_role("button", name="Generar PDF online para imprimir")
