@@ -33,7 +33,7 @@ from alcanto_cloud.workbook import (
 )
 
 st.set_page_config(page_title="PROYECTO ALCANTO | Gestión documental", page_icon="📄", layout="wide")
-RELEASE_TAG = "2026.10.30-pdf-browser-v2"
+RELEASE_TAG = "2026.10.30-xlsx-original-v3"
 
 # No mostrar valores reales en avisos ni en registros de aplicación.
 def secret(nombre: str) -> str:
