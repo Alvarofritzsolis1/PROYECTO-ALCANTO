@@ -27,7 +27,8 @@ class FormularioOnline(unittest.TestCase):
         self.assertIn('catalogo = catalogo_predefinido()', APP)
 
     def test_opciones_del_excel_se_muestran_en_formulario(self):
-        self.assertIn('options=[""] + list(cat["obras"])', APP)
+        self.assertIn('obras = [""] + list(cat["obras"])', APP)
+        self.assertIn("indice = obras.index(obra_principal)", APP)
         self.assertIn('options=[""] + list(cat["cargos"])', APP)
         self.assertIn("RENTA_BASE_REFERENCIA", APP)
         self.assertIn("JORNADA_REFERENCIA", APP)
