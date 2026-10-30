@@ -26,3 +26,11 @@ jobs:
         run: python -m compileall -q app.py alcanto_cloud tests
       - name: Pruebas sin datos personales
         run: python -m unittest discover -s tests -v
+      - name: Generar PDF de muestra sin Excel ni servicios externos
+        run: python -m scripts.generar_pdf_demo
+      - name: Publicar ZIP de demostración (solo datos ficticios)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ALCANTO-10-PDF-DEMO
+          path: artifacts/alcanto_pdf_demo/*.pdf
+          retention-days: 7
